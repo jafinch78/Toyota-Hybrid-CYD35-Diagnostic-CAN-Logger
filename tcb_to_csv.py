@@ -6,13 +6,14 @@ Usage: python tcb_to_csv.py RAW_000.TCB [RAW_001.TCB ...] -o RAW.csv
 import argparse
 import csv
 import struct
+import sys
 from pathlib import Path
 
 HEADER_SIZE = 16
 RECORD = struct.Struct("<QI8sBBBB")
 
 
-def records(path):
+def records(path, allow_truncated=False):
     with path.open("rb") as stream:
         header = stream.read(HEADER_SIZE)
         if len(header) != HEADER_SIZE or header[:4] != b"TCB1":
@@ -24,6 +25,10 @@ def records(path):
             if not raw:
                 return
             if len(raw) != RECORD.size:
+                if allow_truncated:
+                    print(f"Warning: {path}: ignored {len(raw)}-byte truncated final record",
+                          file=sys.stderr)
+                    return
                 raise ValueError(f"{path}: truncated final record")
             yield RECORD.unpack(raw)
 
@@ -32,6 +37,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("inputs", nargs="+", type=Path)
     parser.add_argument("-o", "--output", type=Path, default=Path("RAW.csv"))
+    parser.add_argument("--allow-truncated", action="store_true",
+                        help="ignore a partial final record after unexpected power loss")
     args = parser.parse_args()
     with args.output.open("w", newline="", encoding="utf-8") as output:
         writer = csv.writer(output)
@@ -39,7 +46,8 @@ def main():
                          "Extended", "RTR", "DLC", *[f"D{i}" for i in range(8)]])
         sequence = 0
         for path in args.inputs:
-            for time_us, can_id, data, dlc, extended, rtr, direction in records(path):
+            for time_us, can_id, data, dlc, extended, rtr, direction in records(
+                    path, args.allow_truncated):
                 sequence += 1
                 width = 8 if extended else 3
                 cells = [f"{value:02X}" if i < dlc else "" for i, value in enumerate(data)]
