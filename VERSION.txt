@@ -1,5 +1,5 @@
 Firmware: Toyota_Hybrid_CYD35_Diagnostic_CAN_Logger
-Version: 2.2.0
-Date: 2026-08-21
+Version: 2.3.0
+Date: 2026-08-28
 Status: Bench-test candidate
 Validated prerequisite: CYD35_SD_Touch_Bench_Test_v2_Dual_SPI success
