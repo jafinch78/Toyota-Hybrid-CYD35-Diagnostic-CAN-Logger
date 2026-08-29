@@ -1,16 +1,17 @@
 # Toyota Hybrid CAN Sync Toolkit
 
-The current firmware release is **CYD Logger v2.4.1** for the ESP32 CYD
+The current firmware release is **CYD Logger v2.4.2** for the ESP32 CYD
 3.5-inch board and SN65HVD230/VP230 transceiver using CAN TX GPIO25 and CAN RX
 GPIO32.
 
 ## Current components
 
-1. **CYD Logger v2.4.1** — listen-only startup, touch and microSD capture,
+1. **CYD Logger v2.4.2** — listen-only startup, touch and microSD capture,
    passive Toyota profile detection, evidence-graded decoding, BLE timestamp
-   synchronization, and traffic-aware session logging. v2.4.1 fixes the ESP32
-   SD five-file descriptor failure, defers session creation until explicit
-   Start, and suppresses empty decoded rows before CAN traffic arrives.
+   synchronization, and traffic-aware session logging. v2.4.2 corrects the
+   SD-plus-BLE startup failure found during v2.4.1 hardware testing by reserving
+   BLE resources first, reducing SD descriptor and CAN queue reservations, and
+   making BLE allocation failure nonfatal.
 2. **Toyota CAN Sync Recorder 1.0 for Android** — screen and microphone capture
    for Hybrid Assistant, Dr. Prius, and Autel MaxiAP200 on Android 8/API 26 and
    newer, including Samsung A35 5G and S8+.
@@ -20,15 +21,19 @@ GPIO32.
 
 ## Start here
 
-- Firmware: `firmware/Toyota_Hybrid_CYD35_Diagnostic_CAN_Logger_v2_4_1`
-- v2.4.1 release notes and test procedure: `docs/releases/v2.4.1`
-- Ready-to-download ZIP: `releases/Toyota_Hybrid_CYD35_Diagnostic_CAN_Logger_v2.4.1.zip`
+- Firmware: `firmware/Toyota_Hybrid_CYD35_Diagnostic_CAN_Logger_v2_4_2`
+- v2.4.2 release notes and test procedure: `docs/releases/v2.4.2`
+- Ready-to-download ZIP: `releases/Toyota_Hybrid_CYD35_Diagnostic_CAN_Logger_v2.4.2.zip`
 - Android setup: `docs/INSTALL_ANDROID.md`
 - Windows setup: `docs/INSTALL_WINDOWS.md`
 
 Capture package 1.4, the 24-byte TCB1 raw record, and ToyotaCYD-Sync/1 remain
-compatible with v2.4.0. The Windows processor accepts firmware v2.4.1 without a
-format warning.
+unchanged. The Windows processor accepts firmware v2.4.x with this format.
+
+v2.4.1 is retained for failure provenance only and must not be deployed: with
+the tested microSD installed it could fail BLE server creation and reboot
+through a null address. The v2.4.2 ZIP contains the capture-tested v2.3.0
+rollback.
 
 ## Safety boundary
 
