@@ -1,0 +1,5 @@
+Firmware: 2.4.1
+Capture package: 1.4
+Raw format: TCB1_24_byte_records (unchanged from v2.3.0)
+BLE protocol: ToyotaCYD-Sync/1
+Release date: 2026-08-29
