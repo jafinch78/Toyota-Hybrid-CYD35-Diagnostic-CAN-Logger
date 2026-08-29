@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="match_parent"
+    android:background="#101820">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="vertical" android:padding="20dp">
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:text="Toyota CAN Sync Recorder" android:textColor="#FFFFFF"
+            android:textSize="24sp" android:textStyle="bold" />
+        <TextView android:id="@+id/statusText" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:layout_marginTop="14dp"
+            android:text="Grant permissions, then connect to ToyotaCYD." android:textColor="#B2DFDB"
+            android:textSize="16sp" />
+        <Button android:id="@+id/permissionButton" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:layout_marginTop="18dp"
+            android:text="1. GRANT PERMISSIONS" />
+        <Button android:id="@+id/connectButton" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:text="2. CONNECT TO TOYOTACYD" />
+        <Button android:id="@+id/startButton" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:enabled="false"
+            android:text="3. START SYNCED CAPTURE" />
+        <Button android:id="@+id/markerButton" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:enabled="false"
+            android:text="ADD NARRATION MARKER" />
+        <Button android:id="@+id/stopButton" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:enabled="false"
+            android:text="STOP AND CLOSE CAPTURE" />
+        <Button android:id="@+id/shareButton" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:enabled="false"
+            android:text="SHARE LAST CAPTURE ZIP" />
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="18dp" android:textColor="#CFD8DC" android:textSize="14sp"
+            android:text="Start capture here, accept the Android screen-recording prompt, then switch to Hybrid Assistant, Dr. Prius, or MaxiAP200. Speak observations into the phone microphone. Techstream is captured by the Windows application." />
+    </LinearLayout>
+</ScrollView>

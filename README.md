@@ -1,38 +1,25 @@
-# Toyota Hybrid CYD35 Diagnostic CAN Logger v2.3.0
+# Toyota Hybrid CAN Sync Toolkit v1.0
 
-Use the `.ino` as the only Arduino sketch tab in a folder with the same base name.
-The target is ESP32 Arduino core 3.3.10. `TFT_eSPI_User_Setup_CYD35.h` is included
-as a reference for the active TFT_eSPI `User_Setup.h`; do not add it as a sketch
-tab.
+This coordinated release contains:
 
-Hardware pins: CAN TX GPIO25, CAN RX GPIO32, TFT backlight GPIO27, touch CS GPIO33,
-SD SCK/MISO/MOSI/CS GPIO18/19/23/5. Touch calibration is
-`{295, 3524, 310, 3487, 7}`.
+1. **CYD Logger v2.4.0** — ESP32 CYD 3.5-inch firmware with GPIO25/32 CAN,
+   touch/SD support, listen-only startup, passive Toyota profile detection,
+   evidence-graded decoding, and BLE timestamp/session synchronization.
+2. **Toyota CAN Sync Recorder 1.0 for Android** — screen plus microphone capture
+   for Hybrid Assistant, Dr. Prius, and Autel MaxiAP200 on Android 8/API 26 and
+   newer, including Samsung A35 5G and S8+.
+3. **Toyota CAN Evidence Builder 1.0 for Windows** — Windows 10/11 GUI and CLI
+   for v2.3/v2.4 manifests, TCB1, BLE alignment, OCR, narration transcription,
+   and optional BLE-synchronized Techstream desktop capture.
 
-Raw traffic is saved as `RAW_nnn.TCB` to reduce SD overhead. Convert it on a PC:
+Start with `docs/INSTALL_ANDROID.md`, `docs/INSTALL_WINDOWS.md`, and the firmware
+README. The Windows core has been tested against the supplied 34-session
+CANLOG archive. Firmware and Android source still require their normal Arduino
+IDE and Android Studio on-device build/test steps, documented in
+`docs/VALIDATION.md`.
 
-```sh
-python tcb_to_csv.py RAW_000.TCB RAW_001.TCB -o RAW.csv
-```
-
-v2.3 keeps the proven TCB1 raw format and adds:
-
-- immediate ISO-TP flow control from the high-priority CAN receive task;
-- inactivity-based diagnostic timeouts and response-pending handling;
-- recoverable two-generation five-second `CHECKPOINT.JSON` updates plus a
-  `SESSION.OPEN` marker;
-- TWAI missed/overrun/error/bus-off metrics with automatic bus recovery;
-- passive, profile-gated Camry AHV40 candidates for gear, engine RPM, and
-  engine coolant temperature;
-- clearer `DIAG N/A` behavior until a strong Prius Gen 2 profile is present.
-
-The temperature page shows Engine Coolant, Engine Intake Air, Catalyst B1S1,
-converter, MG1/MG2 inverter, MG1/MG2 motor, all three HV battery temperatures,
-battery intake temperature, and battery average temperature. Diagnostic requests
-are read-only and remain disabled until a strong Prius Gen 2 profile is detected
-and the user presses DIAG.
-Stopping logging also disables diagnostic polling so the firmware never emits
-unrecorded diagnostic traffic.
-
-Camry decoding is passive-only. The current AHV40 mappings are marked
-`PROBABLE`, not confirmed, in each session's `SIGNALS.CSV`.
+Safety boundary: passive capture is the default. BLE has no CAN-transmit API.
+The firmware contains no actuator, fan, write, clear, reset, coding, SD erase,
+or SD format command. Diagnostic normal mode is a separate, explicit,
+profile-gated read-only function and must remain off while another tester is
+connected.

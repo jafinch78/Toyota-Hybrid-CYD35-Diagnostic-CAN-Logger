@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "toyota-can-evidence-builder"
+version = "1.0.0"
+description = "CYD Toyota hybrid CANLOG, BLE sync, OCR, and narration processor"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.scripts]
+toyota-can-process = "toyota_can_processor.cli:main"
+toyota-can-gui = "toyota_can_processor.gui:main"
+toyota-techstream-capture = "toyota_can_processor.capture_cli:main"
+
+[tool.setuptools.packages.find]
+include = ["toyota_can_processor*"]
