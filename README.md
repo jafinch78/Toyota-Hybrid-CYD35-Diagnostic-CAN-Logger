@@ -4,6 +4,11 @@ The current firmware release is **CYD Logger v2.4.2** for the ESP32 CYD
 3.5-inch board and SN65HVD230/VP230 transceiver using CAN TX GPIO25 and CAN RX
 GPIO32.
 
+**CYD Logger v2.5.0-rc.1** is available for bench validation. It adds exclusive
+Wi-Fi microSD folder transfer and deletion-safe monotonic session numbering.
+Keep v2.4.2 as the vehicle-capture rollback until the RC test checklist passes
+on the actual CYD.
+
 ## Current components
 
 1. **CYD Logger v2.4.2** — listen-only startup, touch and microSD capture,
@@ -33,6 +38,10 @@ GPIO32.
 - Firmware: `firmware/Toyota_Hybrid_CYD35_Diagnostic_CAN_Logger_v2_4_2`
 - v2.4.2 release notes and test procedure: `docs/releases/v2.4.2`
 - Ready-to-download ZIP: `releases/Toyota_Hybrid_CYD35_Diagnostic_CAN_Logger_v2.4.2.zip`
+- Wi-Fi RC firmware: `firmware/Toyota_Hybrid_CYD35_Diagnostic_CAN_Logger_v2_5_0`
+- Wi-Fi RC test procedure: `docs/releases/v2.5.0`
+- Wi-Fi file API: `docs/WIFI_FILE_API_V1.md`
+- Wi-Fi RC ZIP: `releases/Toyota_Hybrid_CYD35_Diagnostic_CAN_Logger_v2.5.0-rc.1.zip`
 - Android setup: `docs/INSTALL_ANDROID.md`
 - Windows setup: `docs/INSTALL_WINDOWS.md`
 - Database: `database/Toyota_Hybrid_CAN_Database_v0.5.3.xlsx`
@@ -53,7 +62,9 @@ rollback.
 ## Safety boundary
 
 Passive capture is the default. BLE has no CAN-transmit API. The firmware has
-no actuator, fan, write, clear, reset, coding, SD erase, or SD format command.
+no actuator, fan, write, clear, reset, coding, or SD-format command. The Wi-Fi
+RC adds only an explicitly confirmed deletion of a clean `S####` session; it
+cannot erase the whole card or delete an open/unclean session.
 Diagnostic normal mode is a separate, explicit, profile-gated read-only
 function and must remain off while another tester is connected. Camry Hybrid
 remains passive-only.
