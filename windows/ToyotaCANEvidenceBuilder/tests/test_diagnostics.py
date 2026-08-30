@@ -5,10 +5,43 @@ import unittest
 from pathlib import Path
 
 from toyota_can_processor.database import load_database
-from toyota_can_processor.diagnostics import decode_block_array, reconstruct_external_diagnostics
+from toyota_can_processor.diagnostics import (decode_block_array,
+                                              reconstruct_external_diagnostics,
+                                              write_external_diagnostics)
 
 
 class DiagnosticTests(unittest.TestCase):
+    def test_read_dtc_is_read_only_and_clear_dtc_stays_quarantined(self):
+        frames = [
+            (1_000_000, "7E2", "0213B00000000000", "EXTERNAL_REQUEST"),
+            (1_002_000, "7EA", "0253000000000000", "EXTERNAL_RESPONSE"),
+            (2_000_000, "7E2", "0104000000000000", "EXTERNAL_REQUEST"),
+            (2_002_000, "7EA", "0144000000000000", "EXTERNAL_RESPONSE"),
+        ]
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "EXTERNAL_DIAGNOSTICS.CSV"
+            with source.open("w", newline="", encoding="utf-8") as stream:
+                writer = csv.writer(stream)
+                writer.writerow(["Time_us", "CAN_ID", "DLC", "DataHex", "Classification"])
+                for time_us, can_id, data, classification in frames:
+                    writer.writerow([time_us, can_id, 8, data, classification])
+            database, _ = load_database()
+            summary = write_external_diagnostics(
+                source, root / "normalized.csv", root / "battery.csv",
+                root / "actions.csv", "CAMRY HYB G1", database, None)
+            with (root / "normalized.csv").open(encoding="utf-8") as stream:
+                normalized = list(csv.DictReader(stream))
+            with (root / "actions.csv").open(encoding="utf-8") as stream:
+                actions = list(csv.DictReader(stream))
+        self.assertEqual(summary["diagnostic_action_rows"], 2)
+        self.assertEqual(normalized[0]["Status"], "OK")
+        self.assertEqual(normalized[0]["SafetyClass"], "READ_ONLY_DIAGNOSTIC")
+        self.assertEqual(normalized[0]["DecodedSummary"], "dtc_count=0")
+        self.assertEqual(normalized[1]["SafetyClass"], "CONTROL_WRITE_QUARANTINED")
+        self.assertEqual(actions[0]["Result"], "NO_DTC_PRESENT")
+        self.assertEqual(actions[1]["Result"], "ACKNOWLEDGED")
+
     def test_s0010_21ce_reassembly_and_block_decode(self):
         frames = [
             (220053350, "7E2", "0221CE0000000000", "EXTERNAL_REQUEST"),

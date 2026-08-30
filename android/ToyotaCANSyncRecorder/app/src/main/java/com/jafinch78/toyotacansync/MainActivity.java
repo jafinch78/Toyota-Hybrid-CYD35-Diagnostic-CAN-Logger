@@ -2,6 +2,7 @@ package com.jafinch78.toyotacansync;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -63,6 +64,16 @@ public class MainActivity extends Activity implements BleSyncManager.Listener {
     }
 
     private void beginSyncedCapture() {
+        if (!ble.isReady() || capturing) return;
+        new AlertDialog.Builder(this)
+                .setTitle("Confirm OBD reader app")
+                .setMessage("Before recording, confirm Hybrid Assistant, Dr. Prius, Autel, or the other OBD reader app has been opened and connected to its adapter. Return here, then continue.")
+                .setPositiveButton("CONTINUE", (dialog, which) -> beginSyncedCaptureAfterConfirmation())
+                .setNegativeButton("NOT YET", null)
+                .show();
+    }
+
+    private void beginSyncedCaptureAfterConfirmation() {
         if (!ble.isReady() || capturing) return;
         try {
             SyncStore.begin(this);

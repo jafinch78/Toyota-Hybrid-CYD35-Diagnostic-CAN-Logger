@@ -1,14 +1,28 @@
-# Toyota CAN Evidence Builder 1.0.1
+# Toyota CAN Evidence Builder 1.0.2
 
 The Windows application accepts a CYD `CANLOG.zip` or session tree and an
 optional Android/Windows synchronized-capture ZIP. It validates the logger
 manifest, inventories TCB1 traffic, recovers complete records from a truncated
 tail, normalizes diagnostic outcomes, fits the session's BLE clock relationship,
-and writes aligned CSV/JSON/HTML evidence. Version 1.0.1 also reconstructs
+and writes aligned CSV/JSON/HTML evidence. Version 1.0.2 also reconstructs
 passively observed external ISO-TP requests/responses and uses the versioned
-Toyota Hybrid CAN Database v0.5.2 decoder export.
+Toyota Hybrid CAN Database v0.5.3 decoder export.
 
-## New in 1.0.1
+## New in 1.0.2
+
+- Detects Samsung portrait and rotated-landscape app frames individually, so
+  Hybrid Assistant and Dr. Prius can be used in one recording.
+- Extracts Dr. Prius Battery Monitor's 17 printed block voltages and displayed
+  pack/SOC/current/temperature metrics. Labels obscured by very short bars are
+  reconstructed only from a low-residual bar fit and accepted only when the
+  result reconciles with the displayed pack voltage.
+- Writes `DIAGNOSTIC_ACTIONS_ALIGNED.csv`, grouping repeated read/clear actions
+  by ECU. Read-code `53 00` responses report no DTC present. Clear-code
+  acknowledgements are evidence only and remain `CONTROL_WRITE_QUARANTINED`.
+- Installs/verifies FFmpeg, Tesseract, `faster-whisper`, and `requests`, and
+  hides child command windows during OCR/video processing on Windows.
+
+## Added in 1.0.1
 
 - Populates `DIAGNOSTICS_NORMALIZED.csv` from external tester traffic instead
   of leaving a header-only logger transaction file when the CYD itself did not
@@ -23,8 +37,8 @@ Toyota Hybrid CAN Database v0.5.2 decoder export.
   `BATTERY_GRAPH_ALIGNED.csv`.
 - Cross-checks graph values against the nearest BLE-aligned CAN response and
   checks displayed power against graph pack voltage × displayed current.
-- Provides the same variable-block graph path for Dr. Prius, but that layout
-  remains unvalidated until a Dr. Prius screen capture is supplied.
+- Provides the Hybrid Assistant Battery Check graph/CAN route used as the
+  baseline for the application-specific Dr. Prius validation in v1.0.2.
 
 The GUI runs with `RUN_EVIDENCE_BUILDER.bat`. A command-line interface is also
 available:
@@ -33,11 +47,20 @@ available:
 .venv\Scripts\python -m toyota_can_processor CANLOG.zip -c CAPTURE.zip -o Results --raw-csv --ocr
 ```
 
+Installation and dependency setup:
+
+- `INSTALL_WINDOWS.bat` installs the app-local Python environment, BLE and
+  voice packages, and automatically checks/installs FFmpeg and Tesseract.
+- `INSTALL_VOICE_TRANSCRIPTION.bat` repairs and verifies voice dependencies in
+  the same `.venv` for existing installations.
+- `--check-install` prints the resolved interpreter, package imports, and tool
+  paths without processing a capture.
+
 Optional post-processing:
 
 - `--ocr --ocr-profile HYBRID_ASSISTANT_BATTERY_CHECK` requires FFmpeg and Tesseract.
-- `--transcribe` requires `INSTALL_VOICE_TRANSCRIPTION.bat` and downloads the
-  selected Whisper model on first use.
+- `--transcribe` re-checks and repairs `faster-whisper` and `requests` in the
+  active `.venv`, then downloads the selected Whisper model on first use.
 - `RUN_TECHSTREAM_CAPTURE.bat` uses BLE plus FFmpeg to record the Windows
   desktop and microphone while Techstream runs.
 

@@ -1,0 +1,2 @@
+f153175849069094600e1110622c59be06bb1373e091bfd9ed56f46855ab2396  /workspace/scratch/28a143eb4451/work/github_v052/releases/Toyota_CAN_Evidence_Builder_v1.0.2.zip
+60d7183ec7a65d0cdac4e25b887b02a6daea6a51602b7546044c2ade5e83f6fe  /workspace/scratch/28a143eb4451/work/github_v052/releases/Toyota_Hybrid_CAN_v0.5.3_Evidence_Builder_v1.0.2.zip

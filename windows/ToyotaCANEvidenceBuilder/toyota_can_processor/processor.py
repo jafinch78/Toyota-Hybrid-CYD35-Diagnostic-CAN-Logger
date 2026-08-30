@@ -157,6 +157,7 @@ table{{border-collapse:collapse}}td,th{{border:1px solid #aaa;padding:.4em}}code
 <tr><th>Raw records</th><td>{summary.get('raw', {}).get('raw_record_count', 0)}</td></tr>
 <tr><th>Decoder database</th><td>{html.escape(str(database.get('name', '')))} {html.escape(str(database.get('version', '')))}</td></tr>
 <tr><th>External diagnostic transactions</th><td>{external.get('transactions', 0)}</td></tr>
+<tr><th>Grouped diagnostic actions</th><td>{external.get('diagnostic_action_rows', 0)}</td></tr>
 <tr><th>Decoded battery-block samples</th><td>{external.get('battery_block_rows', 0)}</td></tr>
 <tr><th>BLE alignment samples</th><td>{alignment.get('sample_count_used', 0)}</td></tr>
 <tr><th>BLE fit residual RMS</th><td>{alignment.get('residual_rms_ms')} ms</td></tr>
@@ -204,7 +205,7 @@ def process(logger_source: Path, output_parent: Path, companion_source: Path | N
         progress(f"Found {len(manifests)} logger session(s)")
 
         overall: dict[str, Any] = {
-            "processor_version": "1.0.1",
+            "processor_version": "1.0.2",
             "created_utc": datetime.now(timezone.utc).isoformat(),
             "logger_source": str(logger_source),
             "logger_source_sha256": _sha256(logger_source),
@@ -273,13 +274,15 @@ def process(logger_source: Path, output_parent: Path, companion_source: Path | N
                 session_path / "DIAGNOSTICS.CSV", target / "LOGGER_DIAGNOSTICS_NORMALIZED.csv",
                 compatibility.firmware_normalized, alignment)
             external_summary: dict[str, Any] = {"transactions": 0, "status_counts": {},
-                                                "battery_block_rows": 0}
+                                                "battery_block_rows": 0,
+                                                "diagnostic_action_rows": 0}
             if (session_path / "EXTERNAL_DIAGNOSTICS.CSV").exists():
                 shutil.copy2(session_path / "EXTERNAL_DIAGNOSTICS.CSV", target / "EXTERNAL_DIAGNOSTICS.csv")
                 external_summary = write_external_diagnostics(
                     session_path / "EXTERNAL_DIAGNOSTICS.CSV",
                     target / "EXTERNAL_DIAGNOSTICS_NORMALIZED.csv",
                     target / "BATTERY_BLOCKS_ALIGNED.csv",
+                    target / "DIAGNOSTIC_ACTIONS_ALIGNED.csv",
                     str(manifest.get("vehicle_profile", "UNKNOWN")), database, alignment)
             if external_summary.get("transactions", 0):
                 shutil.copy2(target / "EXTERNAL_DIAGNOSTICS_NORMALIZED.csv",

@@ -4,7 +4,6 @@ import asyncio
 import json
 import os
 import platform
-import shutil
 import statistics
 import struct
 import subprocess
@@ -13,6 +12,8 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
+
+from .dependency_setup import hidden_process_kwargs, resolve_tool
 
 
 SERVICE_UUID = "6ed9f000-4f21-4c8c-a8a7-923c86b40001"
@@ -138,7 +139,7 @@ class DesktopRecorder:
         self.start_after_ns = 0
 
     def start(self) -> None:
-        ffmpeg = shutil.which("ffmpeg")
+        ffmpeg = resolve_tool("ffmpeg")
         if not ffmpeg:
             raise RuntimeError("ffmpeg was not found on PATH")
         command = [ffmpeg, "-hide_banner", "-loglevel", "warning", "-stats_period", "0.1", "-y",
@@ -152,7 +153,8 @@ class DesktopRecorder:
         log = self.output.with_suffix(".ffmpeg.log").open("w", encoding="utf-8")
         self.start_before_ns = time.perf_counter_ns()
         self.process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                        stderr=log, text=True, bufsize=1)
+                                        stderr=log, text=True, bufsize=1,
+                                        **hidden_process_kwargs())
         self.start_after_ns = time.perf_counter_ns()
         self.progress_thread = threading.Thread(target=self._read_progress, daemon=True)
         self.progress_thread.start()
@@ -213,7 +215,7 @@ class CaptureDocument:
         self.video = directory / "SCREEN.mp4"
         self.data: dict[str, Any] = {
             "format": "ToyotaCANSync-WindowsCapture", "format_version": "1.0",
-            "app_version": "1.0.0", "client_platform": "Windows",
+            "app_version": "1.0.2", "client_platform": "Windows",
             "windows_version": platform.platform(), "clock": "time.perf_counter_ns",
             "created_utc": datetime.now(timezone.utc).isoformat(),
             "video_file": self.video.name, "microphone": microphone,
@@ -306,9 +308,10 @@ async def run_windows_capture(output_parent: Path, microphone: str | None,
 
 
 def list_audio_devices() -> str:
-    ffmpeg = shutil.which("ffmpeg")
+    ffmpeg = resolve_tool("ffmpeg")
     if not ffmpeg:
         raise RuntimeError("ffmpeg was not found on PATH")
     result = subprocess.run([ffmpeg, "-hide_banner", "-list_devices", "true", "-f", "dshow", "-i", "dummy"],
-                            capture_output=True, text=True, encoding="utf-8", errors="replace")
+                            capture_output=True, text=True, encoding="utf-8", errors="replace",
+                            **hidden_process_kwargs())
     return result.stderr

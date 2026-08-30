@@ -12,7 +12,7 @@ from .processor import ProcessingOptions, process
 class Application(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
-        self.title("Toyota CAN Evidence Builder 1.0.1")
+        self.title("Toyota CAN Evidence Builder 1.0.2")
         self.geometry("850x650")
         self.minsize(720, 560)
         self.messages: queue.Queue[tuple[str, str]] = queue.Queue()

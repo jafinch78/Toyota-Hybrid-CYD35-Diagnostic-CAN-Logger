@@ -1,3 +1,3 @@
 """Toyota Hybrid CAN synchronized evidence processor."""
 
-__version__ = "1.0.1"
+__version__ = "1.0.2"

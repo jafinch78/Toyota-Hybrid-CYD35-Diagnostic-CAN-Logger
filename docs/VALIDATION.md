@@ -1,38 +1,55 @@
-# Release validation
+# Evidence Builder 1.0.2 validation
 
-## Completed in this build environment
+## Automated tests
 
-- Windows Python modules compiled successfully.
-- Nine unit tests passed: firmware/version normalization, known-format forward
-  tolerance, missing/malformed-manifest safe stops, unknown-major safe stop,
-  TCB1 parsing, truncated-tail recovery, Android-style BLE fitting,
-  Windows-style BLE fitting, and v2.3 processing with extra fields.
-- The processor completed the supplied `CANLOG(2).zip` containing 34 sessions.
-- S0034 processed 1,583,358 TCB1 records across two files with zero truncated
-  bytes and 67 CAN-ID/direction pairs.
-- S0034 diagnostic normalization preserved 3,166 `OK` rows and reclassified 43
-  v2.3 `UNEXPECTED_RESPONSE` rows as
-  `LEGACY_POSSIBLE_EXTERNAL_DIAGNOSTIC_TRAFFIC`; this is a cautious label, not
-  proof of the source of each reply.
-- All Android Java source files passed a Java syntax parser, and all Android
-  manifest/layout/resource XML files parsed successfully.
-- Firmware braces and parentheses are balanced and the v2.3 TCB1 record layout
-  remains protected by its 24-byte static assertion.
+- 18 unit/integration tests pass under Python 3.12-compatible code.
+- Tests cover TCB1 parsing and truncated tails, logger manifest version
+  compatibility, BLE alignment, S0010 `21CE` ISO-TP reconstruction, the
+  exact 17-block vector, graph geometry, orientation handling, Dr. Prius
+  reconstruction, diagnostic-action grouping, dependency checks, and the
+  existing processor behavior.
+- Python bytecode compilation (`compileall`) is clean.
 
-## Required on-device validation
+## Supplied S0012 2007 Camry Hybrid capture
 
-The current environment did not contain ESP32 Arduino core 3.3.10, TFT_eSPI, or
-Android SDK 35, so it could not produce a board-compiled binary or APK. Before
-vehicle use:
+- Logger: CYD v2.4.2, capture format 1.4, TWAI listen-only, GPIO25 TX/GPIO32 RX.
+- 737,093 raw records processed; zero session CAN transmissions and zero SD
+  log drops. The logger reported 1,466 CAN queue drops; that counter remains
+  visible in the session summary rather than being silently discarded.
+- 2,943 external diagnostic transactions reconstructed: 2,541 OK, 382 no
+  response, 17 incomplete, and 3 unmatched responses.
+- 351 complete `7E2 / 21CE` 17-block samples decoded; the AHV40 definition
+  remains `PROBABLE` pending an independent repeated capture or
+  AP200/Techstream corroboration.
+- BLE alignment used 127 of 135 samples: -11.728 ppm drift, 6.561 ms RMS
+  residual, and 20.975 ms maximum residual. The residual warning is retained
+  in `TIME_ALIGNMENT.json` and the session summary.
 
-1. Compile/upload the firmware in the stated Arduino IDE environment.
-2. Bench-test with VP230 CAN-H/CAN-L disconnected: display, touch, SD start/stop,
-   BLE connection, clock samples, and session files.
-3. Verify LISTEN-ONLY operation on a stationary vehicle and confirm TX remains
-   zero while an external diagnostic app is active.
-4. Build/install the Android debug APK and run a short screen/microphone capture
-   on each Samsung model.
-5. Process the new paired session and confirm matching `SYNC.CSV` sequences,
-   reasonable drift, low fit residuals, and an aligned narration marker.
+## Orientation-aware graph and diagnostic evidence
 
-Rollback is the included v2.3.0 firmware ZIP.
+- 273 video frames were sampled at two-second intervals with per-frame
+  orientation/layout detection; no fixed rotation timestamp is assumed.
+- 70 Hybrid Assistant graph frames and 18 Dr. Prius Battery Monitor landscape
+  frames were extracted. All 88 graph rows matched an aligned CAN sample.
+- Dr. Prius rows preserve 17 ordered block values, printed pack voltage,
+  current direction/current, three battery temperatures, SOC, reconstruction
+  count, block RMSE, and source frame. The 330 s frame reconstructed two
+  labels; its 17-value sum matched the displayed 277.43 V pack within the
+  recorded rounded values. All rows are marked `PROBABLE`, not `CONFIRMED`.
+- Four grouped diagnostic actions were aligned to the video: two read-code
+  operations returned `53 00` (`NO_DTC_PRESENT`) and two clear operations
+  returned `44` (`ACKNOWLEDGED`). They are passive observations only;
+  clear-code definitions remain `CONTROL_WRITE_QUARANTINED` and are never
+  enabled for automatic transmit.
+
+## Evidence grade
+
+## Dependency and platform notes
+
+- Windows installation now checks/repairs the app-local `.venv`, including
+  `faster-whisper==1.2.0` and `requests`, and resolves FFmpeg/Tesseract from
+  PATH or standard install locations. OCR subprocess windows are hidden.
+- Android source includes the operator confirmation prompt before a synced
+  capture and targets compile/target SDK 35 with min SDK 26. Android Studio
+  build/install was previously validated on the supplied phones; it was not
+  rebuilt in this Linux validation environment.

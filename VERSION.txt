@@ -1,4 +1,4 @@
-Firmware: 2.4.0
+Firmware: 2.4.2
 Capture package: 1.4
 Raw format: TCB1_24_byte_records (unchanged from v2.3.0)
 BLE protocol: ToyotaCYD-Sync/1

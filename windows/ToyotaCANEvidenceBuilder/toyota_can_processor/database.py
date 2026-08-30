@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 
-DATABASE_FILE = Path(__file__).parent / "data" / "toyota_hybrid_can_db_v0.5.2.json"
+DATABASE_FILE = Path(__file__).parent / "data" / "toyota_hybrid_can_db_v0.5.3.json"
 SEMVER = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
 ALLOWED_SAFETY = {"PASSIVE_BROADCAST", "READ_ONLY_DIAGNOSTIC", "CONTROL_WRITE_QUARANTINED"}
 ALLOWED_EVIDENCE = {"CONFIRMED", "PROBABLE", "CANDIDATE", "REJECTED"}
@@ -79,7 +79,7 @@ def load_database(path: Path | None = None) -> tuple[dict[str, Any], DatabaseInf
 
 
 def find_definition(database: dict[str, Any], profile: str, request_id: int,
-                    service: int, pid: int) -> dict[str, Any] | None:
+                    service: int, pid: int | None) -> dict[str, Any] | None:
     canonical = canonical_profile(profile)
     for definition in database.get("definitions", []):
         if canonical_profile(definition.get("profile")) != canonical:
@@ -88,7 +88,10 @@ def find_definition(database: dict[str, Any], profile: str, request_id: int,
             continue
         if int(str(definition.get("service", "0")), 16) != service:
             continue
-        if int(str(definition.get("pid", "0")), 16) != pid:
+        definition_pid = definition.get("pid")
+        if definition_pid is None and pid is not None:
+            continue
+        if definition_pid is not None and (pid is None or int(str(definition_pid), 16) != pid):
             continue
         return definition
     return None

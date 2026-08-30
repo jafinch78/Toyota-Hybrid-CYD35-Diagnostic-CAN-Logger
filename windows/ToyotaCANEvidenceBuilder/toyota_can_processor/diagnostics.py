@@ -9,7 +9,8 @@ from typing import Any, Callable
 from .database import canonical_profile, find_definition
 
 
-READ_ONLY_SERVICES = {0x01, 0x09, 0x21, 0x22}
+READ_ONLY_SERVICES = {0x01, 0x09, 0x13, 0x21, 0x22}
+POSITIVE_RESPONSE_WITHOUT_PID_ECHO = {0x13}
 
 
 @dataclass
@@ -71,7 +72,7 @@ def _response_matches(request: Request, response_id: int, payload: bytes) -> boo
         return len(payload) >= 2 and payload[1] == request.service
     if payload[0] != ((request.service + 0x40) & 0xFF):
         return False
-    if request.pid is None:
+    if request.pid is None or request.service in POSITIVE_RESPONSE_WITHOUT_PID_ECHO:
         return True
     return len(payload) >= 2 and payload[1] == request.pid
 
@@ -203,6 +204,109 @@ BATTERY_FIELDS = [
 ]
 
 
+ACTION_FIELDS = [
+    "StartVideo_s", "EndVideo_s", "StartRequestTime_us", "EndRequestTime_us",
+    "Profile", "ECU", "Operation", "RequestCAN_ID", "ResponseCAN_ID",
+    "RequestPayloads", "ResponsePayloads", "AttemptCount", "SuccessfulResponses",
+    "Result", "SafetyClass", "EvidenceGrade", "DecoderKeys", "CorrelationBasis",
+]
+
+
+def _diagnostic_operation(request: Request | None) -> str | None:
+    if request is None:
+        return None
+    if request.service == 0x13:
+        return "READ_DTC_BY_STATUS"
+    if request.service == 0x04:
+        return "CLEAR_DTC"
+    return None
+
+
+def _ecu_name(request_id: int) -> str:
+    return {0x7E0: "ENGINE_ECU", 0x7E2: "HYBRID_VEHICLE_ECU",
+            0x7E3: "BATTERY_ECU"}.get(request_id, f"ECU_{request_id:03X}")
+
+
+def _action_result(operation: str, transactions: list[Transaction]) -> str:
+    payloads = [transaction.response_payload for transaction in transactions
+                if transaction.status == "OK"]
+    if operation == "READ_DTC_BY_STATUS":
+        if payloads and all(payload.startswith(b"\x53\x00") for payload in payloads):
+            return "NO_DTC_PRESENT"
+        return "DTC_RESPONSE_PRESENT_REVIEW" if payloads else "NO_CONFIRMED_RESPONSE"
+    if operation == "CLEAR_DTC":
+        return "ACKNOWLEDGED" if payloads and all(payload.startswith(b"\x44") for payload in payloads) \
+            else "NO_CONFIRMED_ACKNOWLEDGEMENT"
+    return "REVIEW"
+
+
+def write_diagnostic_actions(path: Path, transactions: list[Transaction], profile: str,
+                             database: dict[str, Any], alignment: Any | None) -> int:
+    """Write grouped read/clear-code actions observed on the bus.
+
+    Groups repeated requests from one app operation when the gap is no more than
+    eight seconds.  Clear operations remain explicitly quarantined.
+    """
+    candidates = [transaction for transaction in transactions
+                  if _diagnostic_operation(transaction.request) is not None]
+    candidates.sort(key=lambda item: item.request.time_us if item.request else 0)
+    groups: list[list[Transaction]] = []
+    for transaction in candidates:
+        request = transaction.request
+        assert request is not None
+        operation = _diagnostic_operation(request)
+        if groups:
+            prior = groups[-1][-1].request
+            assert prior is not None
+            if (_diagnostic_operation(prior) == operation and prior.can_id == request.can_id
+                    and request.time_us - prior.time_us <= 8_000_000):
+                groups[-1].append(transaction)
+                continue
+        groups.append([transaction])
+
+    profile_key = canonical_profile(profile)
+    with path.open("w", newline="", encoding="utf-8") as stream:
+        writer = csv.DictWriter(stream, fieldnames=ACTION_FIELDS)
+        writer.writeheader()
+        for group in groups:
+            first = group[0].request
+            last = group[-1].request
+            assert first is not None and last is not None
+            operation = _diagnostic_operation(first) or "UNKNOWN"
+            definitions = [find_definition(database, profile_key, item.request.can_id,
+                                           item.request.service, item.request.pid)
+                           for item in group if item.request]
+            definitions = [definition for definition in definitions if definition]
+            responses = [item.response_payload.hex().upper() for item in group
+                         if item.response_payload]
+            response_ids = sorted({f"{item.response_id:03X}" for item in group
+                                   if item.response_id is not None})
+            writer.writerow({
+                "StartVideo_s": _video_time(first.time_us, alignment),
+                "EndVideo_s": _video_time(last.time_us, alignment),
+                "StartRequestTime_us": first.time_us,
+                "EndRequestTime_us": last.time_us,
+                "Profile": profile_key,
+                "ECU": _ecu_name(first.can_id),
+                "Operation": operation,
+                "RequestCAN_ID": f"{first.can_id:03X}",
+                "ResponseCAN_ID": ";".join(response_ids),
+                "RequestPayloads": ";".join(sorted({item.request.payload.hex().upper()
+                                                     for item in group if item.request})),
+                "ResponsePayloads": ";".join(sorted(set(responses))),
+                "AttemptCount": len(group),
+                "SuccessfulResponses": sum(1 for item in group if item.status == "OK"),
+                "Result": _action_result(operation, group),
+                "SafetyClass": "READ_ONLY_DIAGNOSTIC" if operation.startswith("READ_")
+                               else "CONTROL_WRITE_QUARANTINED",
+                "EvidenceGrade": "PROBABLE" if definitions else "OBSERVED_ONLY",
+                "DecoderKeys": ";".join(sorted({str(item.get("key", ""))
+                                                 for item in definitions if item.get("key")})),
+                "CorrelationBasis": "BLE_ALIGNED_PASSIVE_CAN_OBSERVATION",
+            })
+    return len(groups)
+
+
 def decode_block_array(payload: bytes, definition: dict[str, Any]) -> dict[str, Any] | None:
     prefix = bytes.fromhex(str(definition.get("response_prefix", "")))
     if not payload.startswith(prefix):
@@ -233,7 +337,8 @@ def decode_block_array(payload: bytes, definition: dict[str, Any]) -> dict[str, 
 
 
 def write_external_diagnostics(source: Path, normalized_target: Path, battery_target: Path,
-                               profile: str, database: dict[str, Any], alignment: Any | None) -> dict[str, Any]:
+                               action_target: Path, profile: str, database: dict[str, Any],
+                               alignment: Any | None) -> dict[str, Any]:
     transactions = reconstruct_external_diagnostics(source)
     profile_key = canonical_profile(profile)
     counts: dict[str, int] = {}
@@ -249,7 +354,7 @@ def write_external_diagnostics(source: Path, normalized_target: Path, battery_ta
             service = request.service if request else None
             pid = request.pid if request else None
             definition = find_definition(database, profile_key, request.can_id, service, pid) \
-                if request and pid is not None else None
+                if request and service is not None else None
             decoded = None
             decoded_summary = ""
             if definition and definition.get("decoder") == "block_array":
@@ -257,6 +362,10 @@ def write_external_diagnostics(source: Path, normalized_target: Path, battery_ta
                 if decoded:
                     decoded_summary = (f"blocks={len(decoded['values'])};avg={decoded['average']:.4f}V;"
                                        f"diff={decoded['difference']:.4f}V;sum={decoded['sum']:.2f}V")
+            elif service == 0x13 and transaction.response_payload.startswith(b"\x53\x00"):
+                decoded_summary = "dtc_count=0"
+            elif service == 0x04 and transaction.response_payload.startswith(b"\x44"):
+                decoded_summary = "clear_acknowledged"
             latency = ""
             if request and transaction.response_start_us is not None:
                 latency = f"{(transaction.response_start_us - request.time_us) / 1000.0:.3f}"
@@ -306,5 +415,8 @@ def write_external_diagnostics(source: Path, normalized_target: Path, battery_ta
                 for index, value in enumerate(decoded["values"], 1):
                     row[f"B{index:02d}_V"] = f"{value:.3f}"
                 battery.writerow(row)
+    action_rows = write_diagnostic_actions(action_target, transactions, profile_key,
+                                           database, alignment)
     return {"transactions": len(transactions), "status_counts": counts,
-            "battery_block_rows": battery_rows, "profile": profile_key}
+            "battery_block_rows": battery_rows, "diagnostic_action_rows": action_rows,
+            "profile": profile_key}
