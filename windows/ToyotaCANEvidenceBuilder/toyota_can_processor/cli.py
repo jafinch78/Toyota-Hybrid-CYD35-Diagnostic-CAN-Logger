@@ -16,7 +16,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--raw-csv", action="store_true", help="Expand all TCB1 frames to CAN_RAW.csv")
     parser.add_argument("--ocr", action="store_true", help="Run optional FFmpeg/Tesseract OCR")
     parser.add_argument("--ocr-profile", default="AUTO",
-                        choices=["AUTO", "HYBRID_ASSISTANT", "DR_PRIUS", "AUTEL_MAXIAP200", "TECHSTREAM"])
+                        choices=["AUTO", "HYBRID_ASSISTANT", "HYBRID_ASSISTANT_BATTERY_CHECK",
+                                 "DR_PRIUS", "DR_PRIUS_BATTERY_MONITOR",
+                                 "AUTEL_MAXIAP200", "TECHSTREAM"])
     parser.add_argument("--ocr-interval", type=float, default=2.0, help="Seconds between OCR frames")
     parser.add_argument("--transcribe", action="store_true", help="Run optional faster-whisper narration transcription")
     parser.add_argument("--whisper-model", default="small.en")

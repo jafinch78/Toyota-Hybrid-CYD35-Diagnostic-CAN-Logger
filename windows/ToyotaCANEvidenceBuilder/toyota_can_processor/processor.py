@@ -12,6 +12,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
+from .database import canonical_profile, load_database
+from .diagnostics import write_external_diagnostics
 from .media import run_ocr, run_transcription
 from .sync import Alignment, fit_alignment, validate_sd_sync
 from .tcb1 import process_tcb_files
@@ -140,6 +142,8 @@ def _write_report(path: Path, summary: dict[str, Any]) -> None:
     compatibility = summary.get("compatibility", {})
     alignment = summary.get("alignment") or {}
     warnings = summary.get("warnings", [])
+    database = summary.get("decoder_database", {})
+    external = summary.get("external_diagnostics", {})
     rows = "".join(f"<li>{html.escape(str(item))}</li>" for item in warnings) or "<li>None</li>"
     body = f"""<!doctype html><html><head><meta charset='utf-8'><title>Toyota CAN report</title>
 <style>body{{font-family:Segoe UI,Arial;max-width:1100px;margin:2em auto;color:#17202a}}
@@ -151,12 +155,16 @@ table{{border-collapse:collapse}}td,th{{border:1px solid #aaa;padding:.4em}}code
 <tr><th>Profile confidence</th><td>{html.escape(str(manifest.get('profile_confidence_pct')))}%</td></tr>
 <tr><th>Compatibility</th><td>{'SUPPORTED' if compatibility.get('supported') else 'BLOCKED'}</td></tr>
 <tr><th>Raw records</th><td>{summary.get('raw', {}).get('raw_record_count', 0)}</td></tr>
+<tr><th>Decoder database</th><td>{html.escape(str(database.get('name', '')))} {html.escape(str(database.get('version', '')))}</td></tr>
+<tr><th>External diagnostic transactions</th><td>{external.get('transactions', 0)}</td></tr>
+<tr><th>Decoded battery-block samples</th><td>{external.get('battery_block_rows', 0)}</td></tr>
 <tr><th>BLE alignment samples</th><td>{alignment.get('sample_count_used', 0)}</td></tr>
 <tr><th>BLE fit residual RMS</th><td>{alignment.get('residual_rms_ms')} ms</td></tr>
 <tr><th>Clock drift</th><td>{alignment.get('drift_ppm')} ppm</td></tr></table>
 <h2>Warnings</h2><ul>{rows}</ul>
 <h2>Time mapping</h2><code>{html.escape(str(alignment.get('formula') or 'No BLE/video alignment available'))}</code>
 <p>Every alignment is calculated from this capture's BLE exchanges. No offset from another session is reused.</p>
+<p>External diagnostic traffic is passively observed. This report does not authorize the logger to transmit any request or control command.</p>
 </body></html>"""
     path.write_text(body, encoding="utf-8")
 
@@ -186,6 +194,7 @@ def process(logger_source: Path, output_parent: Path, companion_source: Path | N
             else:
                 companion_root = companion_source.parent
 
+        database, database_info = load_database()
         capture_path = _find_capture_json(companion_root) if companion_root else None
         capture_sync = _load_json(capture_path) if capture_path else None
         selected_session = _control_session(capture_sync)
@@ -195,15 +204,20 @@ def process(logger_source: Path, output_parent: Path, companion_source: Path | N
         progress(f"Found {len(manifests)} logger session(s)")
 
         overall: dict[str, Any] = {
-            "processor_version": "1.0.0",
+            "processor_version": "1.0.1",
             "created_utc": datetime.now(timezone.utc).isoformat(),
             "logger_source": str(logger_source),
             "logger_source_sha256": _sha256(logger_source),
             "companion_source": str(companion_source) if companion_source else None,
             "companion_source_sha256": _sha256(companion_source) if companion_source else None,
             "ble_selected_session": selected_session,
+            "decoder_database": asdict(database_info),
             "sessions": [],
         }
+
+        media_can_battery: Path | None = None
+        media_vehicle_profile = "UNKNOWN"
+        media_expected_blocks: int | None = None
 
         for manifest_path in manifests:
             session_path = manifest_path.parent
@@ -256,10 +270,30 @@ def process(logger_source: Path, output_parent: Path, companion_source: Path | N
             _aligned_csv(session_path / "DECODED.CSV", target / "DECODED_ALIGNED.csv",
                          "Time_ms", 1000.0, alignment)
             diagnostic_counts = _normalized_diagnostics(
-                session_path / "DIAGNOSTICS.CSV", target / "DIAGNOSTICS_NORMALIZED.csv",
+                session_path / "DIAGNOSTICS.CSV", target / "LOGGER_DIAGNOSTICS_NORMALIZED.csv",
                 compatibility.firmware_normalized, alignment)
+            external_summary: dict[str, Any] = {"transactions": 0, "status_counts": {},
+                                                "battery_block_rows": 0}
             if (session_path / "EXTERNAL_DIAGNOSTICS.CSV").exists():
                 shutil.copy2(session_path / "EXTERNAL_DIAGNOSTICS.CSV", target / "EXTERNAL_DIAGNOSTICS.csv")
+                external_summary = write_external_diagnostics(
+                    session_path / "EXTERNAL_DIAGNOSTICS.CSV",
+                    target / "EXTERNAL_DIAGNOSTICS_NORMALIZED.csv",
+                    target / "BATTERY_BLOCKS_ALIGNED.csv",
+                    str(manifest.get("vehicle_profile", "UNKNOWN")), database, alignment)
+            if external_summary.get("transactions", 0):
+                shutil.copy2(target / "EXTERNAL_DIAGNOSTICS_NORMALIZED.csv",
+                             target / "DIAGNOSTICS_NORMALIZED.csv")
+            else:
+                shutil.copy2(target / "LOGGER_DIAGNOSTICS_NORMALIZED.csv",
+                             target / "DIAGNOSTICS_NORMALIZED.csv")
+
+            if use_alignment and external_summary.get("battery_block_rows", 0):
+                media_can_battery = target / "BATTERY_BLOCKS_ALIGNED.csv"
+                media_vehicle_profile = canonical_profile(str(manifest.get("vehicle_profile", "UNKNOWN")))
+                profile_info = database.get("profiles", {}).get(media_vehicle_profile, {})
+                value = profile_info.get("block_count")
+                media_expected_blocks = int(value) if value is not None else None
 
             summary = {
                 "session": session_name,
@@ -270,6 +304,8 @@ def process(logger_source: Path, output_parent: Path, companion_source: Path | N
                 "alignment": alignment.to_dict() if alignment else None,
                 "sync_corroboration": sync_validation,
                 "diagnostic_status_counts": diagnostic_counts,
+                "external_diagnostics": external_summary,
+                "decoder_database": asdict(database_info),
                 "warnings": warnings,
             }
             (target / "SESSION_SUMMARY.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
@@ -286,7 +322,10 @@ def process(logger_source: Path, output_parent: Path, companion_source: Path | N
             try:
                 media_results["ocr"] = run_ocr(video, output_root / "OCR_TEXT.csv",
                                                 options.ocr_interval_seconds,
-                                                options.ocr_profile, progress)
+                                                options.ocr_profile, progress,
+                                                output_root / "BATTERY_GRAPH_ALIGNED.csv",
+                                                media_can_battery, media_vehicle_profile,
+                                                media_expected_blocks)
             except Exception as error:
                 media_results["ocr_error"] = str(error)
         if video and options.run_transcription:

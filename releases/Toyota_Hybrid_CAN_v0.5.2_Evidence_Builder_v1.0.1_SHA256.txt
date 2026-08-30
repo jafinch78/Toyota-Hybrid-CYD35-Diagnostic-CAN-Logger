@@ -1,0 +1,4 @@
+7d1b915ba71c77f0b677e2144d7d3a6e1d0fe8066f4a81af7cde515e39119fad  ../database/Toyota_Hybrid_CAN_Database_v0.5.2.xlsx
+a5f9c76770b6be6f6abeb06f56470f2faffd766a3bf7e54fa14db4d764b1008b  ../database/toyota_hybrid_can_db_v0.5.2.json
+54b200bdb8e903863123954fb7be6f0f2c9145da4217b7fcd6ec4d03c15d19de  Toyota_CAN_Evidence_Builder_v1.0.1.zip
+53d394cdb325a787d0dbf352965851fa6f0b9287a55bd4bc07f3a4e7be9a5d4d  Toyota_Hybrid_CAN_v0.5.2_Evidence_Builder_v1.0.1.zip

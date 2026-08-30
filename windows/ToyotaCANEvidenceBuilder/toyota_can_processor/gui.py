@@ -12,7 +12,7 @@ from .processor import ProcessingOptions, process
 class Application(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
-        self.title("Toyota CAN Evidence Builder 1.0")
+        self.title("Toyota CAN Evidence Builder 1.0.1")
         self.geometry("850x650")
         self.minsize(720, 560)
         self.messages: queue.Queue[tuple[str, str]] = queue.Queue()
@@ -43,7 +43,9 @@ class Application(tk.Tk):
         ttk.Checkbutton(options, text="Transcribe narration (requires faster-whisper)", variable=self.transcribe).grid(row=2, column=0, sticky="w")
         ttk.Label(options, text="OCR layout:").grid(row=0, column=1, padx=(30, 6))
         ttk.Combobox(options, textvariable=self.profile, state="readonly", width=22,
-                     values=["AUTO", "HYBRID_ASSISTANT", "DR_PRIUS", "AUTEL_MAXIAP200", "TECHSTREAM"]).grid(row=0, column=2)
+                     values=["AUTO", "HYBRID_ASSISTANT_BATTERY_CHECK",
+                             "DR_PRIUS_BATTERY_MONITOR", "AUTEL_MAXIAP200",
+                             "TECHSTREAM"]).grid(row=0, column=2)
         self.run_button = ttk.Button(frame, text="PROCESS CAPTURE", command=self._start)
         self.run_button.pack(anchor="w", pady=8)
         self.log = tk.Text(frame, height=14, wrap="word", state="disabled", font=("Consolas", 10))
