@@ -15,3 +15,7 @@ connected. The prompt does not connect to or control the OBD adapter.
 
 Open this folder in Android Studio. See `docs/INSTALL_ANDROID.md` in the release
 root for build, installation, Samsung permission, and capture instructions.
+
+Manual copy of the ZIP file can be performed from the phone to a computer via USB connection. The A35 may prevent Samsung My Files from browsing Android/data . The S8+ on Android 8 is more likely to permit access through My Files or USB. Selecting the USB Charging from Notifications dropdown and checking Transferring File / Android Auto was required for the A35. 
+Generated ZIP location:
+>  Internal storage/Android/data/com.jafinch78.toyotacansync/files/Movies/ ToyotaCANSync/CAPTURE_YYYYMMDD_HHMMSS/ SCREEN.mp4 CAPTURE_SYNC.json
