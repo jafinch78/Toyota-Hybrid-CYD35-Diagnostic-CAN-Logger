@@ -1,5 +1,34 @@
 # Changelog
 
+## 1.0.3 — 2026-09-01
+
+- Updated the bundled decoder database to Toyota Hybrid CAN Database v0.5.5.
+- Added generic `field_map`, variable block/health/resistance array, identity,
+  VIN, and response-signature decoding with field-level evidence metadata.
+- Added authoritative profile selection from confirmed diagnostic identity.
+  S0018 `7E0/21C1` `ZVW35 2ZRFXE` now overrides the logger's incorrect Camry
+  heuristic and produces an explicit profile-conflict record.
+- Added PHV decoding for eight seven-cell aggregate block voltages, eight
+  resistances, voltage extrema/indexes, pack/current/SoC fields, TB1-TB12 and
+  intake temperatures, MG/inverter temperature fields, and inverter
+  coolant/pump fields. No 56-individual-cell decoder was added.
+- Added masked VIN/model identity exports and ensured response signatures are
+  not incorrectly emitted as identity rows.
+- Added local CAN/OCR correlation and advisory evidence grading with sample
+  counts, agreement, RMSE, lag, bounds failures, expected mismatches, and
+  independent-session counts. Database grades are never changed automatically.
+- Added BLE `START_PASSIVE` batch pairing and aggregate batch evidence output.
+- Added a self-contained interactive offline report, signal-candidate export,
+  compact evidence capsule, OCR keyframes, and optional validated 720p/10-fps
+  review-proxy generation for large videos. OCR automatically uses a newly
+  created proxy while preserving the source video and hashes.
+- Generalized `BATTERY_BLOCKS_ALIGNED.csv` beyond 17-block Camry responses and
+  added `RESISTANCE_ARRAYS_ALIGNED.csv` and `DECODED_FIELDS_ALIGNED.csv`.
+- Kept all processing passive: no CAN transmit, clear-code, reset, or control
+  path is introduced.
+
+Rollback: use Toyota CAN Evidence Builder 1.0.2 with Toyota Hybrid CAN Database v0.5.3.
+
 ## 1.0.2 — 2026-08-30
 
 - Added automatic per-frame portrait/landscape detection for Samsung screen

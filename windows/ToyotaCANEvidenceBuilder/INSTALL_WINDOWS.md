@@ -1,4 +1,4 @@
-# Toyota CAN Evidence Builder 1.0.2 — Windows 10 and 11
+# Toyota CAN Evidence Builder 1.0.3 — Windows 10 and 11
 
 ## Automatic installation
 
@@ -64,7 +64,7 @@ every capture; no offset from another session is reused.
 
 The GUI can sample Android or Techstream video with the `AUTO`,
 `HYBRID_ASSISTANT_BATTERY_CHECK`, `DR_PRIUS_BATTERY_MONITOR`,
-`AUTEL_MAXIAP200`, or `TECHSTREAM` layout. Version 1.0.2 preserves full-frame
+`AUTEL_MAXIAP200`, or `TECHSTREAM` layout. Version 1.0.3 preserves full-frame
 OCR in `OCR_TEXT.csv` and writes graph-aware battery results to
 `BATTERY_GRAPH_ALIGNED.csv`, with audit crops in `GRAPH_KEYFRAMES`.
 It detects orientation independently for every sampled frame. Hybrid Assistant

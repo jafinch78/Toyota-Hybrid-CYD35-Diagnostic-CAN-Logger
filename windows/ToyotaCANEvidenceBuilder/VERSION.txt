@@ -1,4 +1,4 @@
-Toyota CAN Evidence Builder: 1.0.2
-Toyota Hybrid CAN Database: 0.5.3
+Toyota CAN Evidence Builder: 1.0.3
+Toyota Hybrid CAN Database: 0.5.5
 Database schema: 1.0.0
-Release date: 2026-08-30
+Release date: 2026-09-01

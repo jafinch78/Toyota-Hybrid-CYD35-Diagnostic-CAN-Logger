@@ -12,9 +12,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
+from .candidates import write_signal_candidates
+from .capsule import create_evidence_capsule
 from .database import canonical_profile, load_database
-from .diagnostics import write_external_diagnostics
+from .diagnostics import reconstruct_external_diagnostics, write_external_diagnostics
+from .grading import grade_session
 from .media import run_ocr, run_transcription
+from .profile_detection import detect_vehicle_profile
+from .reporting import write_offline_report
+from .review_proxy import assess_or_create_review_proxy
 from .sync import Alignment, fit_alignment, validate_sd_sync
 from .tcb1 import process_tcb_files
 from .versioning import check_manifest
@@ -31,6 +37,8 @@ class ProcessingOptions:
     ocr_profile: str = "AUTO"
     ocr_interval_seconds: float = 2.0
     whisper_model: str = "small.en"
+    create_review_proxy: bool = True
+    review_proxy_threshold_mb: float = 100.0
 
 
 def _safe_extract(archive: Path, destination: Path) -> Path:
@@ -172,14 +180,15 @@ table{{border-collapse:collapse}}td,th{{border:1px solid #aaa;padding:.4em}}code
 
 def process(logger_source: Path, output_parent: Path, companion_source: Path | None = None,
             video_override: Path | None = None, options: ProcessingOptions | None = None,
-            progress: Progress | None = None) -> dict[str, Any]:
+            progress: Progress | None = None, session_filter: int | None = None,
+            output_name: str | None = None) -> dict[str, Any]:
     options = options or ProcessingOptions()
     progress = progress or (lambda message: None)
     logger_source = logger_source.resolve()
     output_parent = output_parent.resolve()
     output_parent.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_root = output_parent / f"ToyotaCAN_Evidence_{stamp}"
+    output_root = output_parent / (output_name or f"ToyotaCAN_Evidence_{stamp}")
     output_root.mkdir(parents=True, exist_ok=False)
 
     with tempfile.TemporaryDirectory(prefix="toyota_can_process_") as temporary:
@@ -200,12 +209,15 @@ def process(logger_source: Path, output_parent: Path, companion_source: Path | N
         capture_sync = _load_json(capture_path) if capture_path else None
         selected_session = _control_session(capture_sync)
         manifests = sorted(logger_root.rglob("MANIFEST.JSON"))
+        if session_filter is not None:
+            manifests = [path for path in manifests if _session_number(path.parent) == session_filter]
         if not manifests:
-            raise ValueError("No MANIFEST.JSON was found in the logger source")
+            suffix = f" for S{session_filter:04d}" if session_filter is not None else ""
+            raise ValueError(f"No MANIFEST.JSON was found in the logger source{suffix}")
         progress(f"Found {len(manifests)} logger session(s)")
 
         overall: dict[str, Any] = {
-            "processor_version": "1.0.2",
+            "processor_version": "1.0.3",
             "created_utc": datetime.now(timezone.utc).isoformat(),
             "logger_source": str(logger_source),
             "logger_source_sha256": _sha256(logger_source),
@@ -219,6 +231,7 @@ def process(logger_source: Path, output_parent: Path, companion_source: Path | N
         media_can_battery: Path | None = None
         media_vehicle_profile = "UNKNOWN"
         media_expected_blocks: int | None = None
+        session_outputs: list[tuple[str, Path, dict[str, Any]]] = []
 
         for manifest_path in manifests:
             session_path = manifest_path.parent
@@ -275,15 +288,45 @@ def process(logger_source: Path, output_parent: Path, companion_source: Path | N
                 compatibility.firmware_normalized, alignment)
             external_summary: dict[str, Any] = {"transactions": 0, "status_counts": {},
                                                 "battery_block_rows": 0,
+                                                "decoded_field_rows": 0,
+                                                "resistance_rows": 0,
+                                                "identity_rows": 0,
                                                 "diagnostic_action_rows": 0}
+            original_profile = str(manifest.get("vehicle_profile", "UNKNOWN"))
+            profile_evidence = {
+                "manifest_profile": canonical_profile(original_profile),
+                "selected_profile": canonical_profile(original_profile),
+                "profile_conflict": False,
+                "decision": "MANIFEST_RETAINED",
+                "confidence_pct": int(manifest.get("profile_confidence_pct", 0) or 0),
+                "scores": {}, "positive_evidence": [], "contradictory_evidence": [],
+            }
             if (session_path / "EXTERNAL_DIAGNOSTICS.CSV").exists():
                 shutil.copy2(session_path / "EXTERNAL_DIAGNOSTICS.CSV", target / "EXTERNAL_DIAGNOSTICS.csv")
+                transactions = reconstruct_external_diagnostics(session_path / "EXTERNAL_DIAGNOSTICS.CSV")
+                profile_evidence = detect_vehicle_profile(transactions, database, original_profile)
+                (target / "PROFILE_EVIDENCE.json").write_text(
+                    json.dumps(profile_evidence, indent=2), encoding="utf-8")
+                if profile_evidence["profile_conflict"]:
+                    warnings.append(
+                        f"Vehicle profile corrected from {profile_evidence['manifest_profile']} to "
+                        f"{profile_evidence['selected_profile']} by {profile_evidence['decision']}")
                 external_summary = write_external_diagnostics(
                     session_path / "EXTERNAL_DIAGNOSTICS.CSV",
                     target / "EXTERNAL_DIAGNOSTICS_NORMALIZED.csv",
                     target / "BATTERY_BLOCKS_ALIGNED.csv",
                     target / "DIAGNOSTIC_ACTIONS_ALIGNED.csv",
-                    str(manifest.get("vehicle_profile", "UNKNOWN")), database, alignment)
+                    str(profile_evidence["selected_profile"]), database, alignment,
+                    target / "DECODED_FIELDS_ALIGNED.csv",
+                    target / "RESISTANCE_ARRAYS_ALIGNED.csv",
+                    target / "IDENTITY_ALIGNED.csv",
+                    original_profile=original_profile,
+                    profile_selection=str(profile_evidence["decision"]),
+                    source_session=session_name,
+                    transactions=transactions)
+                external_summary.update(write_signal_candidates(
+                    target / "SIGNAL_CANDIDATES.json", transactions,
+                    str(profile_evidence["selected_profile"]), database))
             if external_summary.get("transactions", 0):
                 shutil.copy2(target / "EXTERNAL_DIAGNOSTICS_NORMALIZED.csv",
                              target / "DIAGNOSTICS_NORMALIZED.csv")
@@ -293,7 +336,7 @@ def process(logger_source: Path, output_parent: Path, companion_source: Path | N
 
             if use_alignment and external_summary.get("battery_block_rows", 0):
                 media_can_battery = target / "BATTERY_BLOCKS_ALIGNED.csv"
-                media_vehicle_profile = canonical_profile(str(manifest.get("vehicle_profile", "UNKNOWN")))
+                media_vehicle_profile = canonical_profile(str(profile_evidence["selected_profile"]))
                 profile_info = database.get("profiles", {}).get(media_vehicle_profile, {})
                 value = profile_info.get("block_count")
                 media_expected_blocks = int(value) if value is not None else None
@@ -308,12 +351,14 @@ def process(logger_source: Path, output_parent: Path, companion_source: Path | N
                 "sync_corroboration": sync_validation,
                 "diagnostic_status_counts": diagnostic_counts,
                 "external_diagnostics": external_summary,
+                "profile_evidence": profile_evidence,
                 "decoder_database": asdict(database_info),
                 "warnings": warnings,
             }
             (target / "SESSION_SUMMARY.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
             _write_report(target / "REPORT.html", summary)
             overall["sessions"].append(summary)
+            session_outputs.append((session_name, target, summary))
 
         video = video_override.resolve() if video_override else None
         if video is None and companion_root and capture_sync:
@@ -321,14 +366,29 @@ def process(logger_source: Path, output_parent: Path, companion_source: Path | N
             matches = list(companion_root.rglob(video_name)) if video_name else []
             video = matches[0] if matches else None
         media_results: dict[str, Any] = {}
+        ocr_video = video
+        if video:
+            review_proxy = assess_or_create_review_proxy(
+                video, output_root, capture_sync,
+                enabled=options.create_review_proxy,
+                threshold_mb=options.review_proxy_threshold_mb,
+                progress=progress,
+            )
+            media_results["review_proxy"] = review_proxy
+            if review_proxy.get("created"):
+                candidate = Path(str(review_proxy.get("output", {}).get("path", "")))
+                if candidate.is_file():
+                    ocr_video = candidate
+                    media_results["ocr_source_video"] = str(candidate)
         if video and options.run_ocr:
             try:
-                media_results["ocr"] = run_ocr(video, output_root / "OCR_TEXT.csv",
+                media_results["ocr"] = run_ocr(ocr_video or video, output_root / "OCR_TEXT.csv",
                                                 options.ocr_interval_seconds,
                                                 options.ocr_profile, progress,
                                                 output_root / "BATTERY_GRAPH_ALIGNED.csv",
                                                 media_can_battery, media_vehicle_profile,
-                                                media_expected_blocks)
+                                                media_expected_blocks,
+                                                output_root / "OCR_KEYFRAMES")
             except Exception as error:
                 media_results["ocr_error"] = str(error)
         if video and options.run_transcription:
@@ -338,6 +398,23 @@ def process(logger_source: Path, output_parent: Path, companion_source: Path | N
             except Exception as error:
                 media_results["transcription_error"] = str(error)
         overall["media"] = media_results
-        (output_root / "PROCESSING_SUMMARY.json").write_text(json.dumps(overall, indent=2), encoding="utf-8")
+        ocr_output = output_root / "OCR_TEXT.csv"
+        for session_name, target, summary in session_outputs:
+            grading = grade_session(
+                target / "DECODED_FIELDS_ALIGNED.csv",
+                ocr_output if ocr_output.exists() else None,
+                target / "CAN_OCR_CORRELATION.csv",
+                target / "EVIDENCE_GRADING.csv",
+                target / "EVIDENCE_GRADING.json",
+                session_name,
+            )
+            summary["local_evidence_grading"] = grading
+            (target / "SESSION_SUMMARY.json").write_text(
+                json.dumps(summary, indent=2), encoding="utf-8")
+            write_offline_report(target / "REPORT.html", summary, target, output_root)
+        processing_summary_path = output_root / "PROCESSING_SUMMARY.json"
+        processing_summary_path.write_text(json.dumps(overall, indent=2), encoding="utf-8")
+        overall["evidence_capsule"] = create_evidence_capsule(output_root)
+        processing_summary_path.write_text(json.dumps(overall, indent=2), encoding="utf-8")
         progress(f"Complete: {output_root}")
         return {"output": str(output_root), "summary": overall}

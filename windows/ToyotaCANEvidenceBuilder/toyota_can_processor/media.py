@@ -19,7 +19,8 @@ from .graph_ocr import (correlate_with_can, extract_battery_graph, load_can_batt
 def run_ocr(video: Path, output_csv: Path, interval_seconds: float = 2.0,
             profile: str = "AUTO", progress: Callable[[str], None] | None = None,
             graph_output_csv: Path | None = None, can_battery_csv: Path | None = None,
-            vehicle_profile: str = "UNKNOWN", expected_blocks: int | None = None) -> dict:
+            vehicle_profile: str = "UNKNOWN", expected_blocks: int | None = None,
+            keyframe_dir: Path | None = None) -> dict:
     tools = verify_external_tools()
     ffmpeg = tools["ffmpeg"]
     tesseract = tools["tesseract"]
@@ -35,6 +36,7 @@ def run_ocr(video: Path, output_csv: Path, interval_seconds: float = 2.0,
         frames = sorted(Path(temporary).glob("frame_*.png"))
         can_rows = load_can_battery(can_battery_csv)
         graph_rows = []
+        keyframe_rows = []
         crop_dir = output_csv.parent / "GRAPH_KEYFRAMES"
         with output_csv.open("w", newline="", encoding="utf-8") as stream:
             writer = csv.writer(stream)
@@ -63,9 +65,19 @@ def run_ocr(video: Path, output_csv: Path, interval_seconds: float = 2.0,
                         errors="replace", **hidden_process_kwargs())
                     detail_words = parse_tsv(detail_result.stdout)
                 text = ordered_text(words)
+                lowered = text.lower()
+                keyframe_terms = ("battery block vol", "internal resistance", "temp of batt",
+                                  "state of charge", "model code", "inverter coolant")
+                if keyframe_dir is not None and any(term in lowered for term in keyframe_terms):
+                    if not keyframe_rows or index * interval_seconds - keyframe_rows[-1][0] >= 4.0:
+                        keyframe_dir.mkdir(parents=True, exist_ok=True)
+                        time_token = f"{index * interval_seconds:08.3f}".replace(".", "_")
+                        keyframe_name = f"ocr_{time_token}s.jpg"
+                        detail_image.save(keyframe_dir / keyframe_name, "JPEG", quality=78, optimize=True)
+                        keyframe_rows.append((index * interval_seconds, keyframe_name,
+                                              " ".join(text.split())[:500]))
                 direct_block_values = None
                 dr_graph_bounds = None
-                lowered = text.lower()
                 if (frame_mode == "LANDSCAPE_BAND" and "battery monitor" in lowered
                         and "special features" not in lowered):
                     block_count = expected_blocks if expected_blocks and 8 <= expected_blocks <= 40 else 17
@@ -103,6 +115,11 @@ def run_ocr(video: Path, output_csv: Path, interval_seconds: float = 2.0,
                     progress(f"OCR processed {index}/{len(frames)} frames; battery graphs={len(graph_rows)}")
         if graph_output_csv is not None:
             write_graph_csv(graph_output_csv, graph_rows)
+        if keyframe_dir is not None:
+            with (output_csv.parent / "OCR_KEYFRAMES.csv").open("w", newline="", encoding="utf-8") as stream:
+                writer = csv.writer(stream)
+                writer.writerow(["Video_s", "File", "TextExcerpt"])
+                writer.writerows(keyframe_rows)
         matched = sum(1 for row in graph_rows if row.get("CANMatch") == "MATCHED")
         review_power = sum(1 for row in graph_rows if row.get("PowerPlausibility") == "REVIEW_OCR")
         return {"frames": len(frames), "interval_seconds": interval_seconds,
@@ -110,7 +127,8 @@ def run_ocr(video: Path, output_csv: Path, interval_seconds: float = 2.0,
                 "battery_graph_rows": len(graph_rows), "can_matched_graph_rows": matched,
                 "power_ocr_review_rows": review_power,
                 "graph_output": str(graph_output_csv) if graph_output_csv else None,
-                "graph_keyframes": str(crop_dir) if graph_rows else None}
+                "graph_keyframes": str(crop_dir) if graph_rows else None,
+                "ocr_keyframes": len(keyframe_rows)}
 
 
 def run_transcription(video: Path, output_csv: Path, model_name: str = "small.en",

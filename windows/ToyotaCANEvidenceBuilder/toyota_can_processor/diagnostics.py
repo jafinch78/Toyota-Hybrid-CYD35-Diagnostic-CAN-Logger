@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .database import canonical_profile, find_definition
+from .decoding import decode_definition, decoded_summary as generic_decoded_summary
 
 
 READ_ONLY_SERVICES = {0x01, 0x09, 0x13, 0x21, 0x22}
@@ -192,7 +193,8 @@ NORMALIZED_FIELDS = [
     "RequestCAN_ID", "ResponseCAN_ID", "Service", "PID", "RequestPayloadHex",
     "ResponsePayloadHex", "ResponseLength", "ResponseFrames", "Latency_ms",
     "Status", "MissingSequenceCount", "FlowControlObserved", "SafetyClass",
-    "EvidenceGrade", "DecoderKey", "DecodedSummary",
+    "Profile", "OriginalProfile", "ProfileSelection", "EvidenceGrade",
+    "DecoderKey", "DecoderType", "DecodedSummary", "DecodeWarnings",
 ]
 
 
@@ -209,6 +211,30 @@ ACTION_FIELDS = [
     "Profile", "ECU", "Operation", "RequestCAN_ID", "ResponseCAN_ID",
     "RequestPayloads", "ResponsePayloads", "AttemptCount", "SuccessfulResponses",
     "Result", "SafetyClass", "EvidenceGrade", "DecoderKeys", "CorrelationBasis",
+]
+
+
+DECODED_FIELD_COLUMNS = [
+    "RequestTime_us", "ResponseTime_us", "Video_s", "Profile", "OriginalProfile",
+    "ProfileSelection", "RequestCAN_ID", "ResponseCAN_ID", "Service", "PID",
+    "DecoderKey", "DecoderType", "Field", "ArrayIndex", "Value", "Unit",
+    "RawHex", "Formula", "BoundsStatus", "ExpectedStatus", "EvidenceGrade",
+    "SemanticStatus", "OCRLabels", "OCRTolerance", "SafetyClass", "Status",
+    "SourceSession", "RawResponseHex",
+]
+
+
+RESISTANCE_COLUMNS = [
+    "RequestTime_us", "ResponseTime_us", "Video_s", "Profile", "ServicePID",
+    "ResistanceCount", *[f"R{index:02d}_Ohm" for index in range(1, 18)],
+    "Average_Ohm", "Minimum_Ohm", "Maximum_Ohm", "Status", "EvidenceGrade",
+    "DecoderKey", "RawResponseHex",
+]
+
+
+IDENTITY_COLUMNS = [
+    "RequestTime_us", "ResponseTime_us", "Video_s", "Profile", "ServicePID",
+    "IdentityType", "Value", "MaskedByDefault", "EvidenceGrade", "DecoderKey",
 ]
 
 
@@ -336,36 +362,100 @@ def decode_block_array(payload: bytes, definition: dict[str, Any]) -> dict[str, 
     }
 
 
+def _write_decoded_item(writer: csv.DictWriter, *, item: dict[str, Any],
+                        transaction: Transaction, definition: dict[str, Any],
+                        profile_key: str, original_profile: str, profile_selection: str,
+                        service: int, pid: int | None, alignment: Any | None,
+                        source_session: str, array_index: int | str = "") -> None:
+    request = transaction.request
+    assert request is not None
+    writer.writerow({
+        "RequestTime_us": request.time_us,
+        "ResponseTime_us": transaction.response_start_us or "",
+        "Video_s": _video_time(request.time_us, alignment),
+        "Profile": profile_key,
+        "OriginalProfile": original_profile,
+        "ProfileSelection": profile_selection,
+        "RequestCAN_ID": f"{request.can_id:03X}",
+        "ResponseCAN_ID": f"{transaction.response_id:03X}" if transaction.response_id is not None else "",
+        "Service": f"{service:02X}",
+        "PID": f"{pid:02X}" if pid is not None else "",
+        "DecoderKey": definition.get("key", ""),
+        "DecoderType": definition.get("decoder", ""),
+        "Field": item.get("name", ""),
+        "ArrayIndex": array_index,
+        "Value": item.get("value", ""),
+        "Unit": item.get("unit", ""),
+        "RawHex": item.get("raw_hex", ""),
+        "Formula": item.get("formula", ""),
+        "BoundsStatus": item.get("bounds_status", ""),
+        "ExpectedStatus": item.get("expected_status", ""),
+        "EvidenceGrade": item.get("evidence_grade", definition.get("evidence_grade", "CANDIDATE")),
+        "SemanticStatus": item.get("semantic_status", ""),
+        "OCRLabels": ";".join(item.get("ocr_labels", [])),
+        "OCRTolerance": item.get("ocr_tolerance", "") if item.get("ocr_tolerance") is not None else "",
+        "SafetyClass": definition.get("safety_class", "READ_ONLY_DIAGNOSTIC"),
+        "Status": transaction.status,
+        "SourceSession": source_session,
+        "RawResponseHex": transaction.response_payload.hex().upper(),
+    })
+
+
 def write_external_diagnostics(source: Path, normalized_target: Path, battery_target: Path,
                                action_target: Path, profile: str, database: dict[str, Any],
-                               alignment: Any | None) -> dict[str, Any]:
-    transactions = reconstruct_external_diagnostics(source)
+                               alignment: Any | None, decoded_target: Path | None = None,
+                               resistance_target: Path | None = None,
+                               identity_target: Path | None = None,
+                               original_profile: str | None = None,
+                               profile_selection: str = "MANIFEST_RETAINED",
+                               source_session: str = "",
+                               transactions: list[Transaction] | None = None) -> dict[str, Any]:
+    transactions = transactions if transactions is not None else reconstruct_external_diagnostics(source)
     profile_key = canonical_profile(profile)
+    original_profile_key = canonical_profile(original_profile or profile)
     counts: dict[str, int] = {}
     battery_rows = 0
+    decoded_field_rows = 0
+    resistance_rows = 0
+    identity_rows = 0
+    decode_warning_count = 0
+    decoded_target = decoded_target or normalized_target.with_name("DECODED_FIELDS_ALIGNED.csv")
+    resistance_target = resistance_target or normalized_target.with_name("RESISTANCE_ARRAYS_ALIGNED.csv")
+    identity_target = identity_target or normalized_target.with_name("IDENTITY_ALIGNED.csv")
     with normalized_target.open("w", newline="", encoding="utf-8") as normalized_stream, \
-            battery_target.open("w", newline="", encoding="utf-8") as battery_stream:
+            battery_target.open("w", newline="", encoding="utf-8") as battery_stream, \
+            decoded_target.open("w", newline="", encoding="utf-8") as decoded_stream, \
+            resistance_target.open("w", newline="", encoding="utf-8") as resistance_stream, \
+            identity_target.open("w", newline="", encoding="utf-8") as identity_stream:
         normalized = csv.DictWriter(normalized_stream, fieldnames=NORMALIZED_FIELDS)
         battery = csv.DictWriter(battery_stream, fieldnames=BATTERY_FIELDS)
+        decoded_writer = csv.DictWriter(decoded_stream, fieldnames=DECODED_FIELD_COLUMNS)
+        resistance_writer = csv.DictWriter(resistance_stream, fieldnames=RESISTANCE_COLUMNS)
+        identity_writer = csv.DictWriter(identity_stream, fieldnames=IDENTITY_COLUMNS)
         normalized.writeheader()
         battery.writeheader()
+        decoded_writer.writeheader()
+        resistance_writer.writeheader()
+        identity_writer.writeheader()
         for transaction in transactions:
             request = transaction.request
             service = request.service if request else None
             pid = request.pid if request else None
             definition = find_definition(database, profile_key, request.can_id, service, pid) \
                 if request and service is not None else None
-            decoded = None
-            decoded_summary = ""
-            if definition and definition.get("decoder") == "block_array":
-                decoded = decode_block_array(transaction.response_payload, definition)
-                if decoded:
-                    decoded_summary = (f"blocks={len(decoded['values'])};avg={decoded['average']:.4f}V;"
-                                       f"diff={decoded['difference']:.4f}V;sum={decoded['sum']:.2f}V")
-            elif service == 0x13 and transaction.response_payload.startswith(b"\x53\x00"):
-                decoded_summary = "dtc_count=0"
-            elif service == 0x04 and transaction.response_payload.startswith(b"\x44"):
-                decoded_summary = "clear_acknowledged"
+            decoded: dict[str, Any] | None = None
+            summary_text = ""
+            if definition and transaction.status == "OK":
+                decoded = decode_definition(transaction.response_payload, definition)
+                if decoded and decoded.get("matched"):
+                    summary_text = generic_decoded_summary(decoded)
+                    decode_warning_count += len(decoded.get("warnings", []))
+                else:
+                    decoded = None
+            if not summary_text and service == 0x13 and transaction.response_payload.startswith(b"\x53\x00"):
+                summary_text = "dtc_count=0"
+            elif not summary_text and service == 0x04 and transaction.response_payload.startswith(b"\x44"):
+                summary_text = "clear_acknowledged"
             latency = ""
             if request and transaction.response_start_us is not None:
                 latency = f"{(transaction.response_start_us - request.time_us) / 1000.0:.3f}"
@@ -389,34 +479,106 @@ def write_external_diagnostics(source: Path, normalized_target: Path, battery_ta
                 "MissingSequenceCount": transaction.missing_sequences,
                 "FlowControlObserved": bool(request and request.flow_control_seen),
                 "SafetyClass": _safety(service),
+                "Profile": profile_key,
+                "OriginalProfile": original_profile_key,
+                "ProfileSelection": profile_selection,
                 "EvidenceGrade": definition.get("evidence_grade", "OBSERVED_ONLY") if definition else "OBSERVED_ONLY",
                 "DecoderKey": definition.get("key", "") if definition else "",
-                "DecodedSummary": decoded_summary,
+                "DecoderType": definition.get("decoder", "") if definition else "",
+                "DecodedSummary": summary_text,
+                "DecodeWarnings": ";".join(decoded.get("warnings", [])) if decoded else "",
             })
-            if decoded and len(decoded["values"]) == 17 and request:
+
+            if decoded and request and definition:
+                for item in decoded.get("fields", []):
+                    _write_decoded_item(
+                        decoded_writer, item=item, transaction=transaction, definition=definition,
+                        profile_key=profile_key, original_profile=original_profile_key,
+                        profile_selection=profile_selection, service=service or 0, pid=pid,
+                        alignment=alignment, source_session=source_session)
+                    decoded_field_rows += 1
+                for item in decoded.get("arrays", []):
+                    _write_decoded_item(
+                        decoded_writer, item=item, transaction=transaction, definition=definition,
+                        profile_key=profile_key, original_profile=original_profile_key,
+                        profile_selection=profile_selection, service=service or 0, pid=pid,
+                        alignment=alignment, source_session=source_session,
+                        array_index=int(item.get("index", 0)) or "")
+                    decoded_field_rows += 1
+
+                identity = decoded.get("identity", {})
+                for name, value in identity.items():
+                    if name == "vin":
+                        continue
+                    identity_rows += 1
+                    identity_writer.writerow({
+                        "RequestTime_us": request.time_us,
+                        "ResponseTime_us": transaction.response_start_us or "",
+                        "Video_s": _video_time(request.time_us, alignment),
+                        "Profile": profile_key,
+                        "ServicePID": f"{service:02X}{pid:02X}" if pid is not None else f"{service:02X}",
+                        "IdentityType": name,
+                        "Value": value,
+                        "MaskedByDefault": name == "vin_masked",
+                        "EvidenceGrade": definition.get("evidence_grade", "CANDIDATE"),
+                        "DecoderKey": definition.get("key", ""),
+                    })
+
+            arrays = decoded.get("arrays", []) if decoded else []
+            decoder_type = str(definition.get("decoder", "")) if definition else ""
+            if arrays and decoder_type == "block_array" and request:
                 battery_rows += 1
+                values = [float(item["value"]) for item in arrays]
+                data = transaction.response_payload[len(bytes.fromhex(str(definition.get("response_prefix", "")))):]
+                preamble_length = int(definition.get("preamble_bytes", 0))
                 row = {
                     "RequestTime_us": request.time_us,
                     "ResponseTime_us": transaction.response_start_us or "",
                     "Video_s": _video_time(request.time_us, alignment),
                     "Profile": profile_key,
                     "ServicePID": f"{service:02X}{pid:02X}",
-                    "PreambleHex": decoded["preamble"].hex().upper(),
-                    "PackSum_V": f"{decoded['sum']:.2f}",
-                    "Average_V": f"{decoded['average']:.6f}",
-                    "Minimum_V": f"{decoded['minimum']:.3f}",
-                    "Maximum_V": f"{decoded['maximum']:.3f}",
-                    "Difference_V": f"{decoded['difference']:.3f}",
+                    "PreambleHex": data[:preamble_length].hex().upper(),
+                    "PackSum_V": f"{sum(values):.2f}",
+                    "Average_V": f"{sum(values) / len(values):.6f}",
+                    "Minimum_V": f"{min(values):.3f}",
+                    "Maximum_V": f"{max(values):.3f}",
+                    "Difference_V": f"{max(values) - min(values):.3f}",
                     "Status": transaction.status,
                     "EvidenceGrade": definition.get("evidence_grade", "CANDIDATE"),
                     "DecoderKey": definition.get("key", ""),
                     "RawResponseHex": transaction.response_payload.hex().upper(),
                 }
-                for index, value in enumerate(decoded["values"], 1):
+                for index, value in enumerate(values, 1):
                     row[f"B{index:02d}_V"] = f"{value:.3f}"
                 battery.writerow(row)
+
+            if arrays and decoder_type in {"resistance_array", "block_health_array"} and request:
+                values = [float(item["value"]) for item in arrays]
+                if "resistance" in str(arrays[0].get("name", "")).lower():
+                    resistance_rows += 1
+                    row = {
+                        "RequestTime_us": request.time_us,
+                        "ResponseTime_us": transaction.response_start_us or "",
+                        "Video_s": _video_time(request.time_us, alignment),
+                        "Profile": profile_key,
+                        "ServicePID": f"{service:02X}{pid:02X}",
+                        "ResistanceCount": len(values),
+                        "Average_Ohm": f"{sum(values) / len(values):.6f}",
+                        "Minimum_Ohm": f"{min(values):.6f}",
+                        "Maximum_Ohm": f"{max(values):.6f}",
+                        "Status": transaction.status,
+                        "EvidenceGrade": definition.get("evidence_grade", "CANDIDATE"),
+                        "DecoderKey": definition.get("key", ""),
+                        "RawResponseHex": transaction.response_payload.hex().upper(),
+                    }
+                    for index, value in enumerate(values, 1):
+                        row[f"R{index:02d}_Ohm"] = f"{value:.6f}"
+                    resistance_writer.writerow(row)
     action_rows = write_diagnostic_actions(action_target, transactions, profile_key,
                                            database, alignment)
     return {"transactions": len(transactions), "status_counts": counts,
-            "battery_block_rows": battery_rows, "diagnostic_action_rows": action_rows,
-            "profile": profile_key}
+            "battery_block_rows": battery_rows, "decoded_field_rows": decoded_field_rows,
+            "resistance_rows": resistance_rows, "identity_rows": identity_rows,
+            "decode_warning_count": decode_warning_count,
+            "diagnostic_action_rows": action_rows, "profile": profile_key,
+            "original_profile": original_profile_key, "profile_selection": profile_selection}

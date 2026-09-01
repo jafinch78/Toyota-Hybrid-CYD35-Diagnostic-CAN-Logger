@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 
-DATABASE_FILE = Path(__file__).parent / "data" / "toyota_hybrid_can_db_v0.5.3.json"
+DATABASE_FILE = Path(__file__).parent / "data" / "toyota_hybrid_can_db_v0.5.5.json"
 SEMVER = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
 ALLOWED_SAFETY = {"PASSIVE_BROADCAST", "READ_ONLY_DIAGNOSTIC", "CONTROL_WRITE_QUARANTINED"}
 ALLOWED_EVIDENCE = {"CONFIRMED", "PROBABLE", "CANDIDATE", "REJECTED"}
@@ -65,6 +65,9 @@ def load_database(path: Path | None = None) -> tuple[dict[str, Any], DatabaseInf
             raise ValueError(f"Invalid safety class for {key}")
         if definition.get("evidence_grade") not in ALLOWED_EVIDENCE:
             raise ValueError(f"Invalid evidence grade for {key}")
+        for field in definition.get("fields", []):
+            if field.get("evidence_grade", definition.get("evidence_grade")) not in ALLOWED_EVIDENCE:
+                raise ValueError(f"Invalid field evidence grade for {key}/{field.get('name')}")
         if definition.get("safety_class") == "CONTROL_WRITE_QUARANTINED":
             warnings.append(f"{key} is quarantined and must never be auto-transmitted")
     info = DatabaseInfo(

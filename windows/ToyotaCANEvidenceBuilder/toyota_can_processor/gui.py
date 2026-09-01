@@ -6,23 +6,26 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
+from .batch import process_batch
 from .processor import ProcessingOptions, process
 
 
 class Application(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
-        self.title("Toyota CAN Evidence Builder 1.0.2")
+        self.title("Toyota CAN Evidence Builder 1.0.3")
         self.geometry("850x650")
         self.minsize(720, 560)
         self.messages: queue.Queue[tuple[str, str]] = queue.Queue()
         self.logger = tk.StringVar()
+        self.batch = tk.StringVar()
         self.companion = tk.StringVar()
         self.video = tk.StringVar()
         self.output = tk.StringVar(value=str(Path.home() / "Documents"))
         self.raw = tk.BooleanVar(value=False)
         self.ocr = tk.BooleanVar(value=False)
         self.transcribe = tk.BooleanVar(value=False)
+        self.review_proxy = tk.BooleanVar(value=True)
         self.profile = tk.StringVar(value="AUTO")
         self._build()
         self.after(100, self._poll)
@@ -33,6 +36,7 @@ class Application(tk.Tk):
         ttk.Label(frame, text="Toyota Hybrid CAN + BLE Evidence Builder",
                   font=("Segoe UI", 17, "bold")).pack(anchor="w", pady=(0, 14))
         self._picker(frame, "CYD CANLOG ZIP or folder (required)", self.logger, self._choose_logger)
+        self._picker(frame, "Batch folder (optional; overrides CANLOG)", self.batch, self._choose_batch)
         self._picker(frame, "Android capture ZIP or folder", self.companion, self._choose_companion)
         self._picker(frame, "Video override (Android or Techstream MP4)", self.video, self._choose_video)
         self._picker(frame, "Output parent folder", self.output, self._choose_output)
@@ -41,6 +45,7 @@ class Application(tk.Tk):
         ttk.Checkbutton(options, text="Expand TCB1 to full CAN_RAW.csv", variable=self.raw).grid(row=0, column=0, sticky="w")
         ttk.Checkbutton(options, text="OCR video (requires FFmpeg and Tesseract)", variable=self.ocr).grid(row=1, column=0, sticky="w")
         ttk.Checkbutton(options, text="Transcribe narration (requires faster-whisper)", variable=self.transcribe).grid(row=2, column=0, sticky="w")
+        ttk.Checkbutton(options, text="Create compact 720p/10-fps proxy for large video", variable=self.review_proxy).grid(row=3, column=0, sticky="w")
         ttk.Label(options, text="OCR layout:").grid(row=0, column=1, padx=(30, 6))
         ttk.Combobox(options, textvariable=self.profile, state="readonly", width=22,
                      values=["AUTO", "HYBRID_ASSISTANT_BATTERY_CHECK",
@@ -70,6 +75,10 @@ class Application(tk.Tk):
             selected = filedialog.askdirectory()
         if selected: self.companion.set(selected)
 
+    def _choose_batch(self) -> None:
+        selected = filedialog.askdirectory()
+        if selected: self.batch.set(selected)
+
     def _choose_video(self) -> None:
         selected = filedialog.askopenfilename(filetypes=[("MP4 video", "*.mp4"), ("All video", "*.mkv *.mov *.avi"), ("All files", "*.*")])
         if selected: self.video.set(selected)
@@ -79,21 +88,28 @@ class Application(tk.Tk):
         if selected: self.output.set(selected)
 
     def _start(self) -> None:
-        if not self.logger.get():
-            messagebox.showerror("Missing input", "Select the CYD CANLOG ZIP or folder.")
+        if not self.logger.get() and not self.batch.get():
+            messagebox.showerror("Missing input", "Select a CYD CANLOG or a batch folder.")
             return
         self.run_button.configure(state="disabled")
         self._append("Starting processing...\n")
-        options = ProcessingOptions(self.raw.get(), self.ocr.get(), self.transcribe.get(), self.profile.get())
+        options = ProcessingOptions(
+            write_raw_csv=self.raw.get(), run_ocr=self.ocr.get(),
+            run_transcription=self.transcribe.get(), ocr_profile=self.profile.get(),
+            create_review_proxy=self.review_proxy.get())
         thread = threading.Thread(target=self._worker, args=(options,), daemon=True)
         thread.start()
 
     def _worker(self, options: ProcessingOptions) -> None:
         try:
-            result = process(Path(self.logger.get()), Path(self.output.get()),
-                             Path(self.companion.get()) if self.companion.get() else None,
-                             Path(self.video.get()) if self.video.get() else None,
-                             options, lambda text: self.messages.put(("log", text)))
+            notify = lambda text: self.messages.put(("log", text))
+            if self.batch.get():
+                result = process_batch(Path(self.batch.get()), Path(self.output.get()), options, notify)
+            else:
+                result = process(Path(self.logger.get()), Path(self.output.get()),
+                                 Path(self.companion.get()) if self.companion.get() else None,
+                                 Path(self.video.get()) if self.video.get() else None,
+                                 options, notify)
             self.messages.put(("done", result["output"]))
         except Exception as error:
             self.messages.put(("error", str(error)))

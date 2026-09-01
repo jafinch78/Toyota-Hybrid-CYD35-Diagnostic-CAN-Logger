@@ -215,7 +215,7 @@ class CaptureDocument:
         self.video = directory / "SCREEN.mp4"
         self.data: dict[str, Any] = {
             "format": "ToyotaCANSync-WindowsCapture", "format_version": "1.0",
-            "app_version": "1.0.2", "client_platform": "Windows",
+            "app_version": "1.0.3", "client_platform": "Windows",
             "windows_version": platform.platform(), "clock": "time.perf_counter_ns",
             "created_utc": datetime.now(timezone.utc).isoformat(),
             "video_file": self.video.name, "microphone": microphone,
