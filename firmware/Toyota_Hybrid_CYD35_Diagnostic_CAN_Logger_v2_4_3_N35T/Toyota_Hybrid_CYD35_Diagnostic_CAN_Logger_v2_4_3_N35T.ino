@@ -2939,7 +2939,7 @@ void updateDisplay() {
   tft.fillRect(2, 2, 476, 241, TFT_BLACK);
   tft.setTextColor(TFT_WHITE, TFT_BLACK);
   if (displayPage == 0) {
-    tft.drawString("TOYOTA HYBRID CAN LOGGER v2.5 RC2", 10, 8, 2);
+    tft.drawString(String("TOYOTA HYBRID CAN LOGGER v") + FIRMWARE_VERSION, 10, 8, 2);
     tft.drawString("Vehicle:", 10, 35, 2);
     tft.drawString("Evidence:", 10, 58, 2);
     tft.drawString("TWAI:", 10, 81, 2);

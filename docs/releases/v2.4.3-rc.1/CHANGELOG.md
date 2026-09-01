@@ -1,5 +1,9 @@
 # Changelog — v2.4.3-rc.1
 
+## Packaging correction
+
+- Replaced the stale TFT title `v2.5 RC2` with a title generated from the shared `FIRMWARE_VERSION` constant (`2.4.3-rc.1`). This is a display-only metadata correction.
+
 ## Restored from v2.4.2
 
 - Restored first-missing-`S####` directory allocation.
@@ -26,4 +30,3 @@
 - TWAI still starts in `LISTEN_ONLY` mode.
 - Diagnostic transmit remains opt-in, profile-gated, read-only, rate-limited, and logged.
 - No actuator, fan-control, CAN write, DTC-clear, reset, or coding command was added.
-
