@@ -1,0 +1,8 @@
+Firmware: 2.4.3-rc.1
+Capture format: 1.4
+Board profile: DORHEA_B0DLNJSSFW_ESP32-WROOM-32
+CAN pins: GPIO22 TX / GPIO35 RX (candidate; vehicle validation required)
+Touch: verified with calibration flag 3
+Red LED: GPIO4 active-low, off at boot
+Session allocator: RETAINED_DIRECTORY_V1
+

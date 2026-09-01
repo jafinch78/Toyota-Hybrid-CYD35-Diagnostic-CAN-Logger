@@ -1,0 +1,6 @@
+Firmware: 2.4.3-rc.1
+Capture format: 1.4
+Board profile: ESP32-3248S035R_E32N35T
+CAN pins: GPIO25 TX / GPIO32 RX (established)
+Session allocator: RETAINED_DIRECTORY_V1
+

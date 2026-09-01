@@ -1,0 +1,2 @@
+45e9ca5a424fc697e4a5ad7fb21d6823b6c2660a872ad4c6185fdf0c135a52da  Toyota_Hybrid_CYD35_Logger_v2.4.3-rc.1_Dorhea_B0DLNJSSFW.zip
+d52f014f967cd367f00f6e2338d83d5919d7a59d96acde84cc76f4a6df814e46  Toyota_Hybrid_CYD35_Logger_v2.4.3-rc.1_N35T.zip
