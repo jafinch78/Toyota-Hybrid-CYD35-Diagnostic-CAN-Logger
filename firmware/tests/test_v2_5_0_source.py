@@ -52,6 +52,11 @@ class FirmwareSourceTests(unittest.TestCase):
         self.assertIn('\\"format_version\\": \\"1.4\\"', SOURCE)
         self.assertIn("#define CAN_TX_PIN GPIO_NUM_25", SOURCE)
         self.assertIn("#define CAN_RX_PIN GPIO_NUM_32", SOURCE)
+        self.assertIn("#define CYD_BOARD_DORHEA_B0DLNJSSFW 1", SOURCE)
+        self.assertIn("{295, 3524, 310, 3487, 3}", SOURCE)
+        self.assertIn("{295, 3524, 310, 3487, 7}", SOURCE)
+        self.assertIn("digitalWrite(4, HIGH);", SOURCE)
+        self.assertEqual(SOURCE.count('\\"touch_calibration\\":'), 1)
 
     def test_diagnostic_table_remains_read_only(self):
         table = SOURCE.split("const DiagnosticRequest DIAGNOSTIC_REQUESTS[]", 1)[1].split("// ------------------------------- Global state", 1)[0]
@@ -72,12 +77,16 @@ class FirmwareSourceTests(unittest.TestCase):
     def test_http_surface_is_files_only(self):
         expected = {
             "/api/v1/info", "/api/v1/sessions", "/api/v1/files",
-            "/api/v1/file", "/api/v1/session.zip", "/api/v1/delete",
+            "/api/v1/file", "/api/v1/canlog.zip", "/api/v1/session.zip",
+            "/api/v1/delete",
         }
         routes = set(re.findall(r'wifiServer->on\("([^\"]+)"', SOURCE))
         self.assertTrue(expected.issubset(routes))
         self.assertIn('wifiServer->arg("token") != wifiDeleteToken', SOURCE)
         self.assertIn('SD.exists(openMarker.c_str())', SOURCE)
+        self.assertIn("Download CANLOG ZIP", SOURCE)
+        self.assertIn('"CANLOG/%s/%s"', SOURCE)
+        self.assertIn('filename=\\"CANLOG_%s.zip\\"', SOURCE)
 
     def test_allocator_has_all_recovery_inputs(self):
         for text in ("scanHighestSessionNumber()", "NEXT_SESSION.TXT", "NEXT_SESSION.NEW",
@@ -90,7 +99,7 @@ class FirmwareSourceTests(unittest.TestCase):
         self.assertEqual(crc32_like_firmware(0xFFFFFFFF, data) ^ 0xFFFFFFFF, zlib.crc32(data))
         files = {
             "S0012/RAW_000.TCB": b"TCB1" + data,
-            "S0012/MANIFEST.JSON": b'{"firmware_version":"2.5.0-rc.1"}\n',
+            "S0012/MANIFEST.JSON": b'{"firmware_version":"2.5.0-rc.2"}\n',
         }
         archive = make_reference_stored_zip(files)
         with zipfile.ZipFile(io.BytesIO(archive)) as loaded:

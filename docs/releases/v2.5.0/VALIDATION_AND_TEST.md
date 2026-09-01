@@ -25,6 +25,7 @@ v2.5.0 stable.
 5. Compile and record program-storage and global-memory usage.
 6. Upload with the microSD card initially removed, then reset once.
 7. Confirm the TFT is stable and normal BLE/TWAI startup completes.
+8. Confirm the Dorhea red RGB LED on GPIO4 remains off after setup.
 
 ## SD and normal-logger regression
 
@@ -32,7 +33,8 @@ v2.5.0 stable.
 2. Confirm one startup, no reboot loop, and these Serial prefixes:
 
    ```text
-   # ToyotaHybridCAN Diagnostic Logger v2.5.0-rc.1
+   # ToyotaHybridCAN Diagnostic Logger v2.5.0-rc.2
+   # CYD BOARD,DORHEA_B0DLNJSSFW_ESP32-WROOM-32,touch_flags=3,rotation=1
    # SD READY,max_open_files=10,session=deferred
    # SESSION ALLOCATOR,policy=MONOTONIC_V1,...
    # BLE READY,ToyotaCYD-....
@@ -55,6 +57,13 @@ v2.5.0 stable.
 6. Connect a Samsung phone or Windows laptop to the shown WPA2 network. Accept
    the expected “no internet” notice and remain connected.
 7. Open `http://192.168.4.1` and confirm session and file lists load.
+8. Confirm each session offers both `Download CANLOG ZIP` and the original
+   `Download S#### folder ZIP` option.
+
+The Dorhea B0DLNJSSFW File Manager Touch Test and Wi-Fi path were physically
+tested successfully with rotation 1 and `{295,3524,310,3487,3}`. The complete
+logger RC2 still requires the normal-screen, confirmation-screen, and Wi-Fi
+screen touch matrix before stable release.
 
 ## Transfer integrity
 
@@ -67,7 +76,11 @@ v2.5.0 stable.
    - it contains one `S####` root folder;
    - file count and sizes match the browser list; and
    - `MANIFEST.JSON` and TCB files process in Evidence Builder.
-5. Disconnect and reconnect the Wi-Fi client, then repeat one download.
+5. Download `CANLOG_S####.zip` and confirm:
+   - its root is `CANLOG/S####/`;
+   - it passes ZIP integrity testing; and
+   - Evidence Builder accepts it directly as a CYD CANLOG ZIP.
+6. Disconnect and reconnect the Wi-Fi client, then repeat one download.
 
 ## Deletion and monotonic-number test
 

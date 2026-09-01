@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.5.0-rc.2 — 2026-09-01
+
+- Make the tested Dorhea B0DLNJSSFW ESP32-WROOM-32 board profile active.
+- Use landscape rotation 1 touch calibration `{295,3524,310,3487,3}` for
+  Dorhea while retaining `{295,3524,310,3487,7}` as the selectable
+  ESP32-3248S035R/E32N35T fallback.
+- Turn the Dorhea active-low red RGB LED off by driving GPIO4 HIGH in setup.
+- Record the active board profile and touch calibration in session manifests.
+- Add a prominent `Download CANLOG ZIP` browser option that streams
+  `CANLOG_S####.zip` with a `CANLOG/S####/` root for Evidence Builder.
+- Preserve capture package 1.4, Wi-Fi file API 1, and all CAN safety behavior.
+
 ## 2.5.0-rc.1 — 2026-08-30
 
 - Add an exclusive Wi-Fi SD file-transfer application mode.

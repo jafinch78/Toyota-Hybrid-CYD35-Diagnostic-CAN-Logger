@@ -1,9 +1,9 @@
-Firmware: 2.5.0-rc.1
+Firmware: 2.5.0-rc.2
 Capture package: 1.4
 Raw format: TCB1_24_byte_records
 BLE protocol: ToyotaCYD-Sync/1
 Wi-Fi file API: 1
 SD max open files: 10
 CAN queue records: 1024
-Release date: 2026-08-30
-Status: RELEASE CANDIDATE - CYD bench validation required
+Release date: 2026-09-01
+Status: RELEASE CANDIDATE - DORHEA LOGGER BENCH VALIDATION REQUIRED

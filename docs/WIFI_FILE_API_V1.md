@@ -24,6 +24,7 @@ point; no router or internet connection is required.
 | `GET` | `/api/v1/sessions` | Valid `S####` directories, file counts, sizes and clean state |
 | `GET` | `/api/v1/files?session=S####` | Files within one validated session |
 | `GET` | `/api/v1/file?session=S####&name=FILE` | File download; supports one HTTP `Range` |
+| `GET` | `/api/v1/canlog.zip?session=S####` | Evidence Builder-ready `CANLOG_S####.zip` with a `CANLOG/S####/` root |
 | `GET` | `/api/v1/session.zip?session=S####` | Direct stored ZIP stream with an `S####/` root |
 | `POST` | `/api/v1/delete?...` | Permanently delete one clean, closed session |
 
@@ -37,13 +38,17 @@ The token changes every time Wi-Fi maintenance mode starts. The path validator
 accepts exactly `S` plus four digits and download names containing only letters,
 digits, dot, underscore, or hyphen. `SESSION.OPEN` blocks deletion.
 
-## Folder ZIP behavior
+## CANLOG and folder ZIP behavior
 
-The ESP32 emits a standards-compatible ZIP using method 0 (stored) and data
-descriptors. It calculates CRC-32 while reading and does not create a temporary
-archive on the microSD card. The first release supports up to 128 files and
-rejects ZIP64-sized files. An interrupted whole-folder ZIP should be downloaded
-again; individual files support resumed downloads.
+The browser highlights **Download CANLOG ZIP**, which emits
+`CANLOG_S####.zip` with the familiar `CANLOG/S####/` layout accepted by
+Evidence Builder. The original `S####/` folder ZIP remains available.
+
+Both endpoints emit a standards-compatible ZIP using method 0 (stored) and
+data descriptors. The ESP32 calculates CRC-32 while reading and does not create
+a temporary archive on the microSD card. The first release supports up to 128
+files and rejects ZIP64-sized files. An interrupted whole-folder ZIP should be
+downloaded again; individual files support resumed downloads.
 
 ## Windows integration direction
 

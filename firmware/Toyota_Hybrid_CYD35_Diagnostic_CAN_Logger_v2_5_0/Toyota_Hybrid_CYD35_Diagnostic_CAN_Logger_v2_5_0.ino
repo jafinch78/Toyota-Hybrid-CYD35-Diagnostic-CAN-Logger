@@ -1,8 +1,9 @@
 /*
-  Toyota Hybrid CYD 3.5-inch Diagnostic CAN Logger v2.5.0-rc.1
+  Toyota Hybrid CYD 3.5-inch Diagnostic CAN Logger v2.5.0-rc.2
 
   Target hardware:
-    - ESP32-3248S035R / E32N35T resistive-touch display
+    - Dorhea B0DLNJSSFW ESP32-WROOM-32 resistive-touch display (active profile)
+    - ESP32-3248S035R / E32N35T resistive-touch display (fallback profile)
     - SN65HVD230 / VP230 CAN transceiver
     - ESP32 GPIO25 -> VP230 TXD, GPIO32 <- VP230 RXD
     - OBD-II pin 6 CAN-H, pin 14 CAN-L
@@ -53,6 +54,19 @@ SPIClass sdSPI(HSPI);
 #define SD_SCK_PIN 18
 #define SD_MISO_PIN 19
 #define SD_MOSI_PIN 23
+
+// Touch-controller flag/orientation differs between otherwise compatible CYD
+// board variants. Set this to 0 when building for the original
+// ESP32-3248S035R/E32N35T calibration profile.
+#define CYD_BOARD_DORHEA_B0DLNJSSFW 1
+
+#if CYD_BOARD_DORHEA_B0DLNJSSFW
+constexpr char CYD_BOARD_PROFILE[] = "DORHEA_B0DLNJSSFW_ESP32-WROOM-32";
+uint16_t touchCalibration[5] = {295, 3524, 310, 3487, 3};
+#else
+constexpr char CYD_BOARD_PROFILE[] = "ESP32-3248S035R_E32N35T";
+uint16_t touchCalibration[5] = {295, 3524, 310, 3487, 7};
+#endif
 
 constexpr uint32_t CAN_BITRATE = 500000;
 constexpr uint32_t USB_BAUD = 115200;
@@ -498,12 +512,14 @@ void handleWifiInfo();
 void handleWifiSessions();
 void handleWifiFiles();
 void handleWifiFileDownload();
+void handleCanlogZipDownload();
 void handleWifiSessionZip();
 void handleWifiDeleteSession();
 bool getValidatedSessionArgument(String &sessionNameOut, String &sessionPathOut);
 bool isSafeFileName(const String &name);
 bool writeHttpBytes(WiFiClient &client, const uint8_t *data, size_t length, uint32_t &offset);
-bool sendStoredZip(WiFiClient &client, const String &sessionNameValue, const String &sessionPath);
+bool sendStoredZip(WiFiClient &client, const String &sessionNameValue,
+                   const String &sessionPath, bool canlogLayout);
 bool removeSessionTree(const String &sessionPath);
 uint32_t crc32Update(uint32_t crc, const uint8_t *data, size_t length);
 void writeLe16Buffer(uint8_t *buffer, size_t &offset, uint16_t value);
@@ -593,8 +609,14 @@ class LoggerBleCommandCallbacks : public BLECharacteristicCallbacks {
 void setup() {
   Serial.begin(USB_BAUD);
   delay(100);
-  Serial.println("# ToyotaHybridCAN Diagnostic Logger v2.5.0-rc.1");
+  Serial.println("# ToyotaHybridCAN Diagnostic Logger v2.5.0-rc.2");
   printHeapStage("BOOT");
+
+#if CYD_BOARD_DORHEA_B0DLNJSSFW
+  // Dorhea - Turn active-low red RGB LED off.
+  pinMode(4, OUTPUT);
+  digitalWrite(4, HIGH);
+#endif
 
   pinMode(TFT_BL_PIN, OUTPUT);
   digitalWrite(TFT_BL_PIN, HIGH);
@@ -602,9 +624,11 @@ void setup() {
   tft.setRotation(1);
   tft.invertDisplay(false);
   tft.fillScreen(TFT_BLACK);
-  // Measured on this E32R35T with the microSD card inserted.
-  uint16_t calibration[5] = {295, 3524, 310, 3487, 7};
-  tft.setTouch(calibration);
+  // Both profiles use landscape rotation 1. The Dorhea profile was validated
+  // with the microSD card inserted in the File Manager Touch Test sketch.
+  tft.setTouch(touchCalibration);
+  Serial.printf("# CYD BOARD,%s,touch_flags=%u,rotation=1\n",
+                CYD_BOARD_PROFILE, touchCalibration[4]);
   drawStaticUI();
   printHeapStage("TFT_READY");
 
@@ -1877,7 +1901,7 @@ void writeReadme() {
   char path[64]; snprintf(path, sizeof(path), "%s/README.TXT", sessionDir);
   File file = SD.open(path, FILE_WRITE);
   if (!file) return;
-  file.println("ToyotaHybridCAN Capture Package v1.4 / firmware v2.5.0-rc.1");
+  file.println("ToyotaHybridCAN Capture Package v1.4 / firmware v2.5.0-rc.2");
   file.println("Upload the entire session folder plus the Android CAPTURE_SYNC.json and MP4 to the Windows processor or ChatGPT.");
   file.println("Session files: MANIFEST.JSON, CHECKPOINT.JSON, SIGNALS.CSV, RAW_nnn.TCB, DECODED.CSV, DIAGNOSTICS.CSV, EXTERNAL_DIAGNOSTICS.CSV, EVENTS.CSV and SYNC.CSV.");
   file.println("TCB1 format: 16-byte header, then packed 24-byte little-endian records: uint64 time_us, uint32 CAN_ID, uint8 data[8], uint8 DLC, uint8 extended, uint8 RTR, uint8 direction (0 RX, 1 TX).");
@@ -1934,7 +1958,8 @@ void writeManifest(bool closedCleanly) {
   file.println("  \"format\": \"ToyotaHybridCAN-Capture\",");
   file.println("  \"format_version\": \"1.4\",");
   file.println("  \"firmware\": \"Toyota_Hybrid_CYD35_Diagnostic_CAN_Logger\",");
-  file.println("  \"firmware_version\": \"2.5.0-rc.1\",");
+  file.println("  \"firmware_version\": \"2.5.0-rc.2\",");
+  file.printf("  \"board_profile\": \"%s\",\n", CYD_BOARD_PROFILE);
   file.println("  \"raw_format\": \"TCB1_24_byte_records\",");
   file.println("  \"capture_date_utc\": null,");
   file.println("  \"time_source\": \"ESP32_microseconds_since_boot_with_optional_BLE_sync\",");
@@ -1973,7 +1998,9 @@ void writeManifest(bool closedCleanly) {
   file.println("  \"sd_cs_gpio\": 5,");
   file.printf("  \"sd_max_open_files\": %u,\n", SD_MAX_OPEN_FILES);
   file.println("  \"touch_cs_gpio\": 33,");
-  file.println("  \"touch_calibration\": [295,3524,310,3487,7],");
+  file.printf("  \"touch_calibration\": [%u,%u,%u,%u,%u],\n",
+              touchCalibration[0], touchCalibration[1], touchCalibration[2],
+              touchCalibration[3], touchCalibration[4]);
   file.println("  \"transceiver\": \"SN65HVD230_VP230\",");
   file.println("  \"obd_can_h_pin\": 6,");
   file.println("  \"obd_can_l_pin\": 14,");
@@ -2034,7 +2061,7 @@ void writeCheckpoint(bool closedCleanly) {
   uint64_t freeBytes = cardBytes > usedBytes ? cardBytes - usedBytes : 0;
   file.println("{");
   file.println("  \"format\": \"ToyotaHybridCAN-Checkpoint\",");
-  file.println("  \"firmware_version\": \"2.5.0-rc.1\",");
+  file.println("  \"firmware_version\": \"2.5.0-rc.2\",");
   file.println("  \"session_allocator_policy\": \"MONOTONIC_V1\",");
   file.printf("  \"session_number\": %u,\n", reservedSessionNumber);
   file.printf("  \"session_allocator_next\": %u,\n", nextSessionNumber);
@@ -2340,7 +2367,8 @@ async function loadSessions(){let box=document.getElementById('sessions');box.te
  if(!x.sessions.length){box.textContent='No session folders found.';return;}
  x.sessions.forEach(s=>{let d=document.createElement('div');d.className='card';
   let h=document.createElement('b');h.textContent=s.name+' - '+fmt(s.bytes)+' - '+s.files+' files - '+(s.closed?'closed':'UNCLEAN');d.append(h);d.append(document.createElement('br'));
-  let z=document.createElement('a');z.className='btn';z.textContent='Download folder ZIP';z.href=api+'/session.zip?session='+s.name;d.append(z);
+  let c=document.createElement('a');c.className='btn';c.textContent='Download CANLOG ZIP';c.href=api+'/canlog.zip?session='+s.name;d.append(c);
+  let z=document.createElement('a');z.className='btn';z.textContent='Download S#### folder ZIP';z.href=api+'/session.zip?session='+s.name;d.append(z);
   let f=document.createElement('button');f.textContent='List files';f.onclick=()=>listFiles(s.name);d.append(f);
   let q=document.createElement('button');q.className='delete';q.textContent='Delete closed session';q.disabled=!s.closed;q.onclick=()=>del(s.name);d.append(q);box.append(d);});}
 async function listFiles(s){let r=await fetch(api+'/files?session='+s);let x=await r.json();let box=document.getElementById('files');box.hidden=false;box.textContent='';
@@ -2423,7 +2451,7 @@ void handleWifiInfo() {
   else strncpy(nextName, "FULL", sizeof(nextName));
   nextName[sizeof(nextName) - 1] = '\0';
   String json = "{\"api_version\":" + String(WIFI_FILE_API_VERSION) +
-                ",\"device\":\"" + String(wifiSsid) + "\",\"firmware\":\"2.5.0-rc.1\"" +
+                ",\"device\":\"" + String(wifiSsid) + "\",\"firmware\":\"2.5.0-rc.2\"" +
                 String(sizes) + ",\"next_session\":\"" + String(nextName) +
                 "\",\"delete_token\":\"" + String(wifiDeleteToken) + "\"}";
   wifiServer->sendHeader("Cache-Control", "no-store");
@@ -2590,7 +2618,8 @@ void handleWifiFileDownload() {
   updateWifiFileScreen();
 }
 
-bool sendStoredZip(WiFiClient &client, const String &sessionNameValue, const String &sessionPath) {
+bool sendStoredZip(WiFiClient &client, const String &sessionNameValue,
+                   const String &sessionPath, bool canlogLayout) {
   WifiZipEntry *entries = (WifiZipEntry *)calloc(WIFI_MAX_SESSION_FILES, sizeof(WifiZipEntry));
   uint8_t *buffer = (uint8_t *)malloc(WIFI_TRANSFER_BUFFER_BYTES);
   if (entries == nullptr || buffer == nullptr) {
@@ -2618,8 +2647,13 @@ bool sendStoredZip(WiFiClient &client, const String &sessionNameValue, const Str
           if (entryCount >= WIFI_MAX_SESSION_FILES || entry.size() > 0xFFFFFFFFULL) {
             overflow = true;
           } else {
-            snprintf(entries[entryCount].name, sizeof(entries[entryCount].name), "%s/%s",
-                     sessionNameValue.c_str(), base.c_str());
+            if (canlogLayout) {
+              snprintf(entries[entryCount].name, sizeof(entries[entryCount].name),
+                       "CANLOG/%s/%s", sessionNameValue.c_str(), base.c_str());
+            } else {
+              snprintf(entries[entryCount].name, sizeof(entries[entryCount].name), "%s/%s",
+                       sessionNameValue.c_str(), base.c_str());
+            }
             entries[entryCount].size = (uint32_t)entry.size();
             payloadBytes += entry.size();
             ++entryCount;
@@ -2641,8 +2675,13 @@ bool sendStoredZip(WiFiClient &client, const String &sessionNameValue, const Str
   }
 
   client.print("HTTP/1.0 200 OK\r\nContent-Type: application/zip\r\nCache-Control: no-store\r\n");
-  client.printf("Content-Disposition: attachment; filename=\"%s.zip\"\r\nConnection: close\r\n\r\n",
-                sessionNameValue.c_str());
+  if (canlogLayout) {
+    client.printf("Content-Disposition: attachment; filename=\"CANLOG_%s.zip\"\r\nConnection: close\r\n\r\n",
+                  sessionNameValue.c_str());
+  } else {
+    client.printf("Content-Disposition: attachment; filename=\"%s.zip\"\r\nConnection: close\r\n\r\n",
+                  sessionNameValue.c_str());
+  }
   wifiTransferActive = true;
   wifiTransferBytes = 0;
   wifiTransferTotalBytes = payloadBytes > 0xFFFFFFFFULL ? 0xFFFFFFFFUL : (uint32_t)payloadBytes;
@@ -2666,7 +2705,7 @@ bool sendStoredZip(WiFiClient &client, const String &sessionNameValue, const Str
     ok = writeHttpBytes(client, buffer, headerLength, streamOffset);
 
     String zipName = entries[i].name;
-    int slash = zipName.indexOf('/');
+    int slash = zipName.lastIndexOf('/');
     String sourcePath = sessionPath + "/" + zipName.substring(slash + 1);
     File file = SD.open(sourcePath.c_str(), FILE_READ);
     uint32_t crc = 0xFFFFFFFFUL;
@@ -2727,7 +2766,8 @@ bool sendStoredZip(WiFiClient &client, const String &sessionNameValue, const Str
   client.stop();
   wifiTransferActive = false;
   snprintf(wifiStatus, sizeof(wifiStatus), ok ? "ZIP COMPLETE" : "ZIP INTERRUPTED");
-  Serial.printf("# WIFI ZIP,%s,%s,bytes=%lu\n", sessionNameValue.c_str(),
+  Serial.printf("# WIFI ZIP,%s,layout=%s,%s,bytes=%lu\n", sessionNameValue.c_str(),
+                canlogLayout ? "CANLOG" : "SESSION",
                 ok ? "complete" : "interrupted", (unsigned long)wifiTransferBytes);
   updateWifiFileScreen();
   return ok;
@@ -2740,7 +2780,17 @@ void handleWifiSessionZip() {
     return;
   }
   WiFiClient client = wifiServer->client();
-  sendStoredZip(client, sessionNameValue, sessionPath);
+  sendStoredZip(client, sessionNameValue, sessionPath, false);
+}
+
+void handleCanlogZipDownload() {
+  String sessionNameValue, sessionPath;
+  if (!getValidatedSessionArgument(sessionNameValue, sessionPath)) {
+    wifiServer->send(400, "text/plain", "Invalid session");
+    return;
+  }
+  WiFiClient client = wifiServer->client();
+  sendStoredZip(client, sessionNameValue, sessionPath, true);
 }
 
 bool removeSessionTree(const String &sessionPath) {
@@ -2805,6 +2855,7 @@ void configureWifiHttpRoutes() {
   wifiServer->on("/api/v1/sessions", HTTP_GET, handleWifiSessions);
   wifiServer->on("/api/v1/files", HTTP_GET, handleWifiFiles);
   wifiServer->on("/api/v1/file", HTTP_GET, handleWifiFileDownload);
+  wifiServer->on("/api/v1/canlog.zip", HTTP_GET, handleCanlogZipDownload);
   wifiServer->on("/api/v1/session.zip", HTTP_GET, handleWifiSessionZip);
   wifiServer->on("/api/v1/delete", HTTP_POST, handleWifiDeleteSession);
   wifiServer->onNotFound([]() { wifiServer->send(404, "text/plain", "Not found"); });
@@ -2960,7 +3011,7 @@ void updateDisplay() {
   tft.fillRect(2, 2, 476, 241, TFT_BLACK);
   tft.setTextColor(TFT_WHITE, TFT_BLACK);
   if (displayPage == 0) {
-    tft.drawString("TOYOTA HYBRID CAN LOGGER v2.5 RC1", 10, 8, 2);
+    tft.drawString("TOYOTA HYBRID CAN LOGGER v2.5 RC2", 10, 8, 2);
     tft.drawString("Vehicle:", 10, 35, 2);
     tft.drawString("Evidence:", 10, 58, 2);
     tft.drawString("TWAI:", 10, 81, 2);
