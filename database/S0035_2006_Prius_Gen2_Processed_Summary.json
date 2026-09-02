@@ -1,0 +1,58 @@
+{
+  "capture_id": "S0035",
+  "vehicle": "2006 Prius Gen 2 NHW20",
+  "evidence_role": "processed acquisition and passive external diagnostic observation",
+  "logger": {
+    "firmware_version": "2.4.2",
+    "board_profile": "DORHEA_B0DLNJSSFW",
+    "capture_format": "1.4",
+    "can_bitrate": 500000,
+    "twai_mode": "LISTEN_ONLY",
+    "session_transmit_frames": 0
+  },
+  "processing": {
+    "processor_version": "1.0.2",
+    "database_version": "0.5.3",
+    "raw_records": 931047,
+    "session_duration_seconds": 562.069613,
+    "can_id_direction_pairs": 66,
+    "external_diagnostic_transactions": 1226,
+    "external_diagnostic_status_counts": {
+      "OK": 1111,
+      "NO_RESPONSE": 60,
+      "UNMATCHED_RESPONSE": 52,
+      "NEGATIVE_RESPONSE_11": 1,
+      "NEGATIVE_RESPONSE_12": 1,
+      "INCOMPLETE_SEQUENCE": 1
+    },
+    "diagnostic_action_rows": 7,
+    "battery_block_rows": 0
+  },
+  "quality": {
+    "can_queue_drops": 177,
+    "sd_log_drops": 0,
+    "bus_error_count": 23,
+    "bus_off_events": 0,
+    "ble_sync_samples": 135,
+    "alignment_samples_used": 130,
+    "alignment_rms_ms": 5.1274277610864685,
+    "alignment_warning": "BLE fit residual RMS exceeds 5 ms"
+  },
+  "identity_observation": {
+    "model_response": "NHW20C 1NZFXE",
+    "evidence_grade": "OBSERVED_ONLY",
+    "vin_included": false
+  },
+  "source_sha256": {
+    "CANLOG_2026090126_185750.zip": "371f3ebfd5ef8f181124f7312fa02727cf34ef720e01ff6ea9534fc478c21f28",
+    "CAPTURE_20260901_185750.zip": "e49c9e6baf6563705e13a2ea011984b4858a49b71752d06d8697c40eff016a99",
+    "CAPTURE_20260901_185750_rsz.zip": "d1b6be8e80d6ed8d37a7e9d4ddbac69a1324d0d54360dfc1bc3c8e651ff6d6b8",
+    "ToyotaCAN_Evidence_20260901_193400.zip": "11cbd995257904c2cb15e9f9f6b0418aaf4aba634023bacab76f3f91040001e0"
+  },
+  "limitations": [
+    "Processed with Evidence Builder v1.0.2 and database v0.5.3.",
+    "No decoded battery-block rows were produced.",
+    "This acquisition does not automatically promote or regrade database definitions.",
+    "VIN-bearing source data is masked or omitted from this summary."
+  ]
+}

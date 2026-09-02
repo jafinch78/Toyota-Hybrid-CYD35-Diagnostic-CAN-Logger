@@ -68,6 +68,24 @@ def main() -> None:
     data["version"] = "0.5.5"
     data["released_utc"] = "2026-09-01T00:00:00Z"
     data["rollback"] = "Toyota_Hybrid_CAN_Database_v0.5.4.xlsx"
+    gen3_profile = data["profiles"]["PRIUS_GEN3"]
+    gen3_profile.update({
+        "block_count": 14,
+        "cell_count": 168,
+        "cells_per_block": 12,
+        "module_count": 28,
+        "cells_per_module": 6,
+        "modules_per_block": 2,
+        "chemistry": "NiMH",
+        "voltage_sensing_level": "block",
+        "individual_module_values_available": False,
+        "individual_cell_values_available": False,
+        "notes": (
+            "ZVW30 NiMH pack: 28 six-cell modules paired as 14 twelve-cell blocks. "
+            "The battery ECU reports the 14 block-level voltages; it does not report "
+            "28 individual module voltages or 168 individual cell voltages."
+        ),
+    })
     phv_profile = data["profiles"]["PRIUS_PHV_GEN1"]
     phv_profile["identity_model_codes"] = ["ZVW35"]
     phv_profile["engine_codes"] = ["2ZRFXE"]
@@ -373,7 +391,48 @@ def main() -> None:
             "The model-code response is authoritative for offline profile correction."
         ),
     }
+    data["capture_evidence"]["S0035"] = {
+        "vehicle": "2006 Prius Gen 2 NHW20",
+        "logger_version": "2.4.2",
+        "board_profile": "DORHEA_B0DLNJSSFW",
+        "processor_version": "1.0.2",
+        "processor_database_version": "0.5.3",
+        "capture_format": "1.4",
+        "twai_mode": "LISTEN_ONLY",
+        "can_bitrate": 500000,
+        "raw_records": 931047,
+        "session_duration_us": 562069613,
+        "session_transmit_frames": 0,
+        "can_queue_drops": 177,
+        "sd_log_drops": 0,
+        "bus_error_count": 23,
+        "bus_off_events": 0,
+        "external_diagnostic_frames": 4662,
+        "external_diagnostic_transactions": 1226,
+        "successful_external_transactions": 1111,
+        "diagnostic_action_rows": 7,
+        "battery_block_rows": 0,
+        "ble_sync_samples": 135,
+        "alignment_samples_used": 130,
+        "alignment_rms_ms": 5.1274277610864685,
+        "alignment_warning": "BLE fit residual RMS exceeds 5 ms",
+        "identity_model_response": "NHW20C 1NZFXE",
+        "identity_evidence_grade": "OBSERVED_ONLY",
+        "source_sha256": {
+            "CANLOG_2026090126_185750.zip": "371f3ebfd5ef8f181124f7312fa02727cf34ef720e01ff6ea9534fc478c21f28",
+            "CAPTURE_20260901_185750.zip": "e49c9e6baf6563705e13a2ea011984b4858a49b71752d06d8697c40eff016a99",
+            "CAPTURE_20260901_185750_rsz.zip": "d1b6be8e80d6ed8d37a7e9d4ddbac69a1324d0d54360dfc1bc3c8e651ff6d6b8",
+            "ToyotaCAN_Evidence_20260901_193400.zip": "11cbd995257904c2cb15e9f9f6b0418aaf4aba634023bacab76f3f91040001e0",
+        },
+        "notes": (
+            "Processed acquisition retained as profile-specific evidence. The logger transmitted no frames. "
+            "The v1.0.2/v0.5.3 processor produced no decoded battery-block rows, so S0035 does not by itself "
+            "promote or regrade a database definition. VIN-bearing source data remains masked or omitted."
+        ),
+    }
     data["release_notes"] = [
+        "Corrects the ZVW30 NiMH profile topology to 14 sensed blocks, 168 cells, 12 cells per block, and 28 six-cell modules paired two per block; no module- or cell-level values are claimed.",
+        "Adds the processed S0035 2006 NHW20 acquisition summary and provenance without changing definition grades.",
         "Uses the S0018 ZVW35/2ZRFXE model response to distinguish Prius PHV Gen 1 from AHV40 Camry.",
         "Adds masked standard VIN, hybrid ECU code, inverter coolant/pump, dual power-resource current, and block-extrema definitions.",
         "Confirms PHV 2101 core SoC/coolant, 2170/2171 temperatures, 2181 eight aggregate block voltages, 2187 intake/TB1-TB12 temperatures, 2195 eight resistances, and 2198 current/SoC/control fields.",

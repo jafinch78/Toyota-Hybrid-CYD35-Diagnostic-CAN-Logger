@@ -12,6 +12,40 @@ profiles and definitions and adds six read-only ZVW35 definitions. Evidence
 Builder v1.0.3 is the first processor release that operationally exports every
 decoder type used here.
 
+## ZVW30 Prius Gen 3 battery-profile correction
+
+- Corrected the `PRIUS_GEN3` / ZVW30 NiMH profile to explicitly record 14
+  sensed blocks, 168 cells, and 12 cells per block.
+- Recorded the physical construction as 28 six-cell modules, with two modules
+  forming each sensed block.
+- Made the sensing boundary explicit: the battery ECU exposes 14 block-level
+  voltage values, not 28 individual module voltages or 168 individual cell
+  voltages.
+- This metadata correction does not add, remove, or regrade any CAN definition;
+  the reviewed release remains at 44 definitions.
+- User-supplied physical verification from three ZVW30 NiMH packs is retained
+  with two PriusChat interchangeability discussions in the workbook Sources
+  sheet.
+
+## S0035 2006 Prius Gen 2 processed acquisition
+
+- Added a dedicated workbook sheet and JSON provenance record for the 2006
+  Prius Gen 2 / NHW20 S0035 acquisition.
+- S0035 contains 931,047 raw records over 562.070 seconds, 66 CAN-ID/direction
+  pairs, 1,226 reconstructed external diagnostic transactions, and 1,111 OK
+  transactions.
+- The logger ran firmware v2.4.2 on the Dorhea profile at 500 kbit/s in
+  `LISTEN_ONLY` mode and transmitted zero frames. It recorded 177 CAN queue
+  drops, zero SD-log drops, 23 bus errors, and zero bus-off events.
+- BLE alignment used 130 of 135 samples with 5.127 ms RMS residual; the
+  processor warning is retained rather than suppressed.
+- Processing used Evidence Builder v1.0.2 with database v0.5.3 and produced no
+  decoded battery-block rows. S0035 is therefore retained as acquisition and
+  diagnostic-observation evidence and does not automatically promote or
+  regrade any of the 44 reviewed definitions.
+- The observed `NHW20C 1NZFXE` model response is recorded as `OBSERVED_ONLY`.
+  VIN-bearing source data is masked or omitted from the workbook summary.
+
 ## Vehicle identity and profile correction
 
 - Added confirmed `7E0/21C1` ASCII model signature `ZVW35 2ZRFXE`.

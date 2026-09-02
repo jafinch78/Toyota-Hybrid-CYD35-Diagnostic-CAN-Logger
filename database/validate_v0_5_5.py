@@ -88,12 +88,35 @@ def main() -> int:
     require(not any("56" in item["key"] and "CELL" in item["key"] for item in definitions),
             "unvalidated 56-cell definition present")
 
+    gen3 = current["profiles"]["PRIUS_GEN3"]
+    require((gen3["block_count"], gen3["cell_count"], gen3["cells_per_block"]) == (14, 168, 12),
+            "wrong ZVW30 NiMH block/cell topology")
+    require((gen3["module_count"], gen3["cells_per_module"], gen3["modules_per_block"]) == (28, 6, 2),
+            "wrong ZVW30 NiMH module topology")
+    require(gen3["chemistry"] == "NiMH", "wrong ZVW30 battery chemistry")
+    require(gen3["voltage_sensing_level"] == "block", "ZVW30 sensing must remain block-level")
+    require(gen3["individual_module_values_available"] is False,
+            "ZVW30 module-level values must remain unavailable")
+    require(gen3["individual_cell_values_available"] is False,
+            "ZVW30 cell-level values must remain unavailable")
+
     model_signatures = [item for item in current.get("profile_signatures", [])
                         if item.get("profile") == "PRIUS_PHV_GEN1"
                         and item.get("response_ascii_contains") == "ZVW35"]
     require(len(model_signatures) == 1 and model_signatures[0].get("authoritative") is True,
             "authoritative ZVW35 signature missing")
     require("S0018" in current.get("capture_evidence", {}), "S0018 provenance missing")
+    s0035 = current.get("capture_evidence", {}).get("S0035")
+    require(s0035 is not None, "S0035 provenance missing")
+    require(s0035["vehicle"] == "2006 Prius Gen 2 NHW20", "wrong S0035 vehicle")
+    require(s0035["raw_records"] == 931047, "wrong S0035 raw-record count")
+    require(s0035["external_diagnostic_transactions"] == 1226,
+            "wrong S0035 external transaction count")
+    require(s0035["successful_external_transactions"] == 1111,
+            "wrong S0035 successful transaction count")
+    require(s0035["session_transmit_frames"] == 0, "S0035 must remain passive")
+    require(s0035["battery_block_rows"] == 0,
+            "S0035 must not claim unavailable decoded battery-block rows")
 
     print(f"PASS: {CURRENT.name}")
     print(f"definitions={len(definitions)} profiles={len(profiles)} signatures={len(current.get('profile_signatures', []))}")

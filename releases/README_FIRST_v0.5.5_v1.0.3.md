@@ -33,4 +33,8 @@ automatically. VINs are masked by default.
 The confirmed ZVW35 profile contains eight seven-cell aggregate block voltages.
 It does not claim 56 individually decoded cell voltages.
 
+The corrected ZVW30 NiMH profile records 14 sensed twelve-cell blocks assembled
+from 28 six-cell modules, for 168 cells total. It does not claim individual
+module- or cell-voltage values.
+
 Database v0.5.4 and Evidence Builder v1.0.2 remain the rollback checkpoints.
