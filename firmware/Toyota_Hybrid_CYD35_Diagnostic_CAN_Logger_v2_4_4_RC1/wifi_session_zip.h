@@ -5,8 +5,9 @@
 
 // Minimal ZIP writer for Wi-Fi maintenance mode.
 // Uses ZIP method 0 (STORE / no compression) deliberately: no extra ZIP library,
-// deterministic RAM use, and no impact on the logger runtime. The temporary ZIP
-// therefore needs approximately the same free SD space as the selected session.
+// deterministic behavior, and no impact on the logger runtime. All large ZIP
+// working buffers are allocated from heap only while preparing an archive so the
+// HTTP/WebServer task stack is not consumed by multi-kilobyte local arrays.
 
 struct WifiZipEntry {
   char name[64];
@@ -30,12 +31,11 @@ static bool zipWrite32(File &out, uint32_t value) {
   return out.write(b, sizeof(b)) == sizeof(b);
 }
 
-static uint32_t zipCrc32File(File &file, bool &ok) {
+static uint32_t zipCrc32File(File &file, uint8_t *buffer, size_t bufferSize, bool &ok) {
   uint32_t crc = 0xFFFFFFFFUL;
-  uint8_t buffer[1024];
   ok = true;
   while (file.available()) {
-    size_t count = file.read(buffer, sizeof(buffer));
+    size_t count = file.read(buffer, bufferSize);
     if (count == 0) { ok = false; break; }
     for (size_t i = 0; i < count; ++i) {
       crc ^= buffer[i];
@@ -43,14 +43,14 @@ static uint32_t zipCrc32File(File &file, bool &ok) {
         crc = (crc >> 1) ^ (0xEDB88320UL & (uint32_t)-(int32_t)(crc & 1));
       }
     }
+    delay(0);  // keep ESP32 watchdog/network housekeeping serviced
   }
   return crc ^ 0xFFFFFFFFUL;
 }
 
-static bool zipCopyFile(File &input, File &output) {
-  uint8_t buffer[2048];
+static bool zipCopyFile(File &input, File &output, uint8_t *buffer, size_t bufferSize) {
   while (input.available()) {
-    size_t count = input.read(buffer, sizeof(buffer));
+    size_t count = input.read(buffer, bufferSize);
     if (count == 0) return false;
     if (output.write(buffer, count) != count) return false;
     delay(0);
@@ -62,13 +62,10 @@ static bool buildStoredSessionZip(const String &session, const String &sourcePat
                                   const String &zipPath, uint64_t sourceBytes,
                                   uint64_t &zipBytes, String &error) {
   constexpr size_t MAX_ZIP_FILES = 64;
-  WifiZipEntry entries[MAX_ZIP_FILES];
-  size_t entryCount = 0;
+  constexpr size_t IO_BUFFER_SIZE = 2048;
   zipBytes = 0;
   error = "";
 
-  // STORE ZIP needs roughly source size plus headers. Keep a safety margin so
-  // the archive never intentionally fills the card to the last sector.
   uint64_t total = SD.totalBytes();
   uint64_t used = SD.usedBytes();
   uint64_t freeBytes = total > used ? total - used : 0;
@@ -78,9 +75,26 @@ static bool buildStoredSessionZip(const String &session, const String &sourcePat
     return false;
   }
 
+  WifiZipEntry *entries = (WifiZipEntry *)malloc(sizeof(WifiZipEntry) * MAX_ZIP_FILES);
+  uint8_t *ioBuffer = (uint8_t *)malloc(IO_BUFFER_SIZE);
+  if (!entries || !ioBuffer) {
+    if (entries) free(entries);
+    if (ioBuffer) free(ioBuffer);
+    error = "Not enough ESP32 heap for ZIP workspace.";
+    return false;
+  }
+  memset(entries, 0, sizeof(WifiZipEntry) * MAX_ZIP_FILES);
+  size_t entryCount = 0;
+
+  auto releaseWorkspace = [&]() {
+    free(ioBuffer);
+    free(entries);
+  };
+
   File dir = SD.open(sourcePath.c_str());
   if (!dir || !dir.isDirectory()) {
     if (dir) dir.close();
+    releaseWorkspace();
     error = "Session directory not found.";
     return false;
   }
@@ -88,14 +102,12 @@ static bool buildStoredSessionZip(const String &session, const String &sourcePat
   File item = dir.openNextFile();
   while (item) {
     if (item.isDirectory()) {
-      item.close();
-      dir.close();
+      item.close(); dir.close(); releaseWorkspace();
       error = "Nested directories are not supported in RC1 session ZIPs.";
       return false;
     }
     if (entryCount >= MAX_ZIP_FILES) {
-      item.close();
-      dir.close();
+      item.close(); dir.close(); releaseWorkspace();
       error = "Session has more than 64 files; ZIP not created.";
       return false;
     }
@@ -104,29 +116,26 @@ static bool buildStoredSessionZip(const String &session, const String &sourcePat
     int slash = fullName.lastIndexOf('/');
     String baseName = slash >= 0 ? fullName.substring(slash + 1) : fullName;
     if (baseName.length() == 0 || baseName.length() >= sizeof(entries[entryCount].name)) {
-      item.close();
-      dir.close();
+      item.close(); dir.close(); releaseWorkspace();
       error = "A session filename is too long for the RC1 ZIP writer.";
       return false;
     }
     if (item.size() > 0xFFFFFFFFULL) {
-      item.close();
-      dir.close();
+      item.close(); dir.close(); releaseWorkspace();
       error = "A session file exceeds classic ZIP 4 GB limits.";
       return false;
     }
 
     bool crcOk = false;
-    uint32_t crc = zipCrc32File(item, crcOk);
     uint32_t size = (uint32_t)item.size();
+    uint32_t crc = zipCrc32File(item, ioBuffer, IO_BUFFER_SIZE, crcOk);
     item.close();
     if (!crcOk) {
-      dir.close();
+      dir.close(); releaseWorkspace();
       error = "Failed while calculating file CRC.";
       return false;
     }
 
-    memset(&entries[entryCount], 0, sizeof(entries[entryCount]));
     strncpy(entries[entryCount].name, baseName.c_str(), sizeof(entries[entryCount].name) - 1);
     entries[entryCount].size = size;
     entries[entryCount].crc32 = crc;
@@ -136,17 +145,20 @@ static bool buildStoredSessionZip(const String &session, const String &sourcePat
   dir.close();
 
   if (entryCount == 0) {
+    releaseWorkspace();
     error = "Session is empty; no ZIP created.";
     return false;
   }
 
   if (SD.exists(zipPath.c_str()) && !SD.remove(zipPath.c_str())) {
+    releaseWorkspace();
     error = "Could not replace existing temporary ZIP.";
     return false;
   }
 
   File out = SD.open(zipPath.c_str(), FILE_WRITE);
   if (!out) {
+    releaseWorkspace();
     error = "Could not create temporary ZIP on SD.";
     return false;
   }
@@ -154,20 +166,15 @@ static bool buildStoredSessionZip(const String &session, const String &sourcePat
   bool ok = true;
   for (size_t i = 0; i < entryCount && ok; ++i) {
     String zipName = session + "/" + String(entries[i].name);
-    if (zipName.length() > 0xFFFF) { ok = false; break; }
     if (out.position() > 0xFFFFFFFFULL) { ok = false; break; }
     entries[i].localOffset = (uint32_t)out.position();
 
-    ok = zipWrite32(out, 0x04034B50UL) && // local file header
-         zipWrite16(out, 20) &&           // version needed
-         zipWrite16(out, 0) &&            // flags
-         zipWrite16(out, 0) &&            // method: STORE
-         zipWrite16(out, 0) && zipWrite16(out, 0) && // DOS time/date
+    ok = zipWrite32(out, 0x04034B50UL) &&
+         zipWrite16(out, 20) && zipWrite16(out, 0) && zipWrite16(out, 0) &&
+         zipWrite16(out, 0) && zipWrite16(out, 0) &&
          zipWrite32(out, entries[i].crc32) &&
-         zipWrite32(out, entries[i].size) &&
-         zipWrite32(out, entries[i].size) &&
-         zipWrite16(out, (uint16_t)zipName.length()) &&
-         zipWrite16(out, 0) &&
+         zipWrite32(out, entries[i].size) && zipWrite32(out, entries[i].size) &&
+         zipWrite16(out, (uint16_t)zipName.length()) && zipWrite16(out, 0) &&
          out.write((const uint8_t *)zipName.c_str(), zipName.length()) == zipName.length();
     if (!ok) break;
 
@@ -178,7 +185,7 @@ static bool buildStoredSessionZip(const String &session, const String &sourcePat
       ok = false;
       break;
     }
-    ok = zipCopyFile(input, out);
+    ok = zipCopyFile(input, out, ioBuffer, IO_BUFFER_SIZE);
     input.close();
   }
 
@@ -191,18 +198,15 @@ static bool buildStoredSessionZip(const String &session, const String &sourcePat
 
   for (size_t i = 0; i < entryCount && ok; ++i) {
     String zipName = session + "/" + String(entries[i].name);
-    ok = zipWrite32(out, 0x02014B50UL) && // central directory header
+    ok = zipWrite32(out, 0x02014B50UL) &&
          zipWrite16(out, 20) && zipWrite16(out, 20) &&
          zipWrite16(out, 0) && zipWrite16(out, 0) &&
          zipWrite16(out, 0) && zipWrite16(out, 0) &&
          zipWrite32(out, entries[i].crc32) &&
-         zipWrite32(out, entries[i].size) &&
-         zipWrite32(out, entries[i].size) &&
+         zipWrite32(out, entries[i].size) && zipWrite32(out, entries[i].size) &&
          zipWrite16(out, (uint16_t)zipName.length()) &&
-         zipWrite16(out, 0) && zipWrite16(out, 0) &&
-         zipWrite16(out, 0) && zipWrite16(out, 0) &&
-         zipWrite32(out, 0) &&
-         zipWrite32(out, entries[i].localOffset) &&
+         zipWrite16(out, 0) && zipWrite16(out, 0) && zipWrite16(out, 0) && zipWrite16(out, 0) &&
+         zipWrite32(out, 0) && zipWrite32(out, entries[i].localOffset) &&
          out.write((const uint8_t *)zipName.c_str(), zipName.length()) == zipName.length();
   }
 
@@ -213,18 +217,16 @@ static bool buildStoredSessionZip(const String &session, const String &sourcePat
   }
 
   if (ok) {
-    ok = zipWrite32(out, 0x06054B50UL) && // end of central directory
+    ok = zipWrite32(out, 0x06054B50UL) &&
          zipWrite16(out, 0) && zipWrite16(out, 0) &&
-         zipWrite16(out, (uint16_t)entryCount) &&
-         zipWrite16(out, (uint16_t)entryCount) &&
-         zipWrite32(out, centralSize) &&
-         zipWrite32(out, centralOffset) &&
-         zipWrite16(out, 0);
+         zipWrite16(out, (uint16_t)entryCount) && zipWrite16(out, (uint16_t)entryCount) &&
+         zipWrite32(out, centralSize) && zipWrite32(out, centralOffset) && zipWrite16(out, 0);
   }
 
   out.flush();
   zipBytes = out.size();
   out.close();
+  releaseWorkspace();
 
   if (!ok) {
     SD.remove(zipPath.c_str());
