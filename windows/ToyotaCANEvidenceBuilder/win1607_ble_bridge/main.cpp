@@ -70,7 +70,11 @@ std::string encode_hex(const std::vector<unsigned char>& data) {
 
 IBuffer^ make_buffer(const std::vector<unsigned char>& bytes) {
     DataWriter^ writer = ref new DataWriter();
-    auto array = ref new Array<unsigned char>(bytes.data(), static_cast<unsigned int>(bytes.size()));
+    auto array = ref new Array<unsigned char>(
+        static_cast<unsigned int>(bytes.size()));
+    for (unsigned int i = 0; i < array->Length; ++i) {
+        array[i] = bytes[i];
+    }
     writer->WriteBytes(array);
     return writer->DetachBuffer();
 }
@@ -140,8 +144,15 @@ public:
                     response_ = response;
 
                     notification_token_ = response_->ValueChanged +=
-                        ref new Windows::Foundation::TypedEventHandler<GattCharacteristic^, GattValueChangedEventArgs^>(
-                            this, &LegacyBleTransport::on_value_changed);
+                        ref new Windows::Foundation::TypedEventHandler<
+                            GattCharacteristic^,
+                            GattValueChangedEventArgs^>(
+                                [this](
+                                    GattCharacteristic^ sender,
+                                    GattValueChangedEventArgs^ args)
+                                {
+                                    this->on_value_changed(sender, args);
+                                });
 
                     GattCommunicationStatus notify_status = create_task(
                         response_->WriteClientCharacteristicConfigurationDescriptorAsync(
