@@ -116,6 +116,7 @@ class DesktopRecorder:
         self.video_clock_samples: list[dict[str, int]] = []
         self.start_before_ns = 0
         self.start_after_ns = 0
+        self.stop_requested_ns = 0
 
     def start(self) -> None:
         ffmpeg = shutil.which("ffmpeg")
@@ -152,6 +153,7 @@ class DesktopRecorder:
     def stop(self) -> None:
         if not self.process:
             return
+        self.stop_requested_ns = time.perf_counter_ns()
         if self.process.stdin:
             try:
                 self.process.stdin.write("q\n")
@@ -167,22 +169,48 @@ class DesktopRecorder:
             self.progress_thread.join(timeout=2)
 
     def timing(self) -> dict[str, Any]:
-        values = [item["client_read_ns"] - item["video_out_time_us"] * 1000
-                  for item in self.video_clock_samples if item["video_out_time_us"] >= 0]
-        if values:
-            values.sort()
-            best = values[:max(1, len(values) // 5)]
-            anchor = int(statistics.median(best))
-            uncertainty = max(33_333_334, int(max(best) - min(best)) if len(best) > 1 else 100_000_000)
-            method = "ffmpeg_progress_low_delay_fit"
+        samples = [item for item in self.video_clock_samples
+                   if item["video_out_time_us"] >= 0
+                   and (not self.stop_requested_ns or item["client_read_ns"] <= self.stop_requested_ns)]
+        offsets = [item["client_read_ns"] - item["video_out_time_us"] * 1000 for item in samples]
+        usable = offsets
+        median = None
+        mad = None
+        gate = None
+        low_count = 0
+        if offsets:
+            median = int(statistics.median(offsets))
+            absolute_deviations = [abs(value - median) for value in offsets]
+            mad = int(statistics.median(absolute_deviations)) if absolute_deviations else 0
+            gate = max(100_000_000, 8 * mad)
+            usable = [value for value in offsets if abs(value - median) <= gate]
+            if not usable:
+                usable = offsets
+            usable.sort()
+            low_count = max(5 if len(usable) >= 5 else 1, len(usable) // 20)
+            low_count = min(low_count, len(usable))
+            low = usable[:low_count]
+            anchor = int(statistics.median(low))
+            cluster_radius = max(abs(value - anchor) for value in low) if low else 100_000_000
+            uncertainty = max(33_333_334, int(cluster_radius))
+            method = "ffmpeg_progress_robust_low_delay_fit_v3"
         else:
             anchor = self.start_before_ns + (self.start_after_ns - self.start_before_ns) // 2
             uncertainty = max(500_000_000, self.start_after_ns - self.start_before_ns)
             method = "ffmpeg_process_launch_fallback"
         return {"video_start_call_before_ns": self.start_before_ns,
                 "video_start_call_after_ns": self.start_after_ns,
+                "video_stop_requested_ns": self.stop_requested_ns,
                 "video_anchor_ns": anchor, "video_anchor_uncertainty_ns": uncertainty,
-                "video_anchor_method": method, "video_clock_samples": self.video_clock_samples}
+                "video_anchor_method": method,
+                "video_clock_sample_count": len(self.video_clock_samples),
+                "video_clock_usable_sample_count": len(usable),
+                "video_clock_rejected_sample_count": len(self.video_clock_samples) - len(usable),
+                "video_clock_low_delay_sample_count": low_count,
+                "video_clock_offset_median_ns": median,
+                "video_clock_offset_mad_ns": mad,
+                "video_clock_outlier_gate_ns": gate,
+                "video_clock_samples": self.video_clock_samples}
 
 
 class CaptureDocument:
