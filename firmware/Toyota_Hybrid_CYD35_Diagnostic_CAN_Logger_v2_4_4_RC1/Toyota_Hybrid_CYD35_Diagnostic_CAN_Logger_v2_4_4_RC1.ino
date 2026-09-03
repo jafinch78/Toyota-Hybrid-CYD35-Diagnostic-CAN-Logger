@@ -21,6 +21,7 @@
 #include <WiFi.h>
 #include <WebServer.h>
 #include "database_v0_5_5_decoded_ids.h"
+#include "wifi_session_zip.h"
 
 #define setup logger242_setup
 #define loop logger242_loop
@@ -72,8 +73,12 @@ static bool validFileName(const String &name) {
   return true;
 }
 
-static String sessionPath(const String &session) {
-  return String("/CANLOG/") + session;
+static String sessionPath(const String &session) { return String("/CANLOG/") + session; }
+static String zipPath(const String &session) { return String("/CANLOG/_ZIP/") + session + ".zip"; }
+
+static bool ensureZipDirectory() {
+  if (SD.exists("/CANLOG/_ZIP")) return true;
+  return SD.mkdir("/CANLOG/_ZIP");
 }
 
 static uint64_t directoryBytes(const String &path) {
@@ -88,6 +93,14 @@ static uint64_t directoryBytes(const String &path) {
   }
   dir.close();
   return total;
+}
+
+static uint64_t fileBytes(const String &path) {
+  File f = SD.open(path.c_str(), FILE_READ);
+  if (!f || f.isDirectory()) { if (f) f.close(); return 0; }
+  uint64_t size = f.size();
+  f.close();
+  return size;
 }
 
 static String humanBytes(uint64_t bytes) {
@@ -121,18 +134,25 @@ static bool clearDirectoryContents(const String &path) {
 
 static void sendPage(const String &body, int code = 200) {
   String html = F("<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'>"
-                  "<title>Toyota CYD Wi-Fi Files</title><style>body{font-family:sans-serif;max-width:900px;margin:24px auto;padding:0 12px}"
-                  "table{border-collapse:collapse;width:100%}td,th{border-bottom:1px solid #ccc;padding:8px;text-align:left}"
-                  "button,a.btn{padding:8px 12px;margin:3px;text-decoration:none}.danger{background:#b00020;color:white}</style></head><body>");
+                  "<title>Toyota CYD Wi-Fi Files</title><style>"
+                  "*{box-sizing:border-box}body{font-family:Arial,sans-serif;max-width:900px;margin:0 auto;padding:18px;background:#f5f6f7;color:#171717}"
+                  "h1{font-size:1.7rem;margin:.2em 0}.sub{color:#555;margin:.4em 0 1.2em}.session{background:white;border:1px solid #ddd;border-radius:12px;padding:14px;margin:10px 0;box-shadow:0 1px 2px #0001}"
+                  ".sessionHead{display:flex;justify-content:space-between;gap:12px;align-items:baseline}.sessionName{font-size:1.2rem;font-weight:700}.size{color:#555;white-space:nowrap}.state{font-size:.85rem;color:#666;margin-top:3px}"
+                  ".actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}.btn,button{appearance:none;border:1px solid #aaa;border-radius:8px;background:#fff;color:#111;padding:9px 12px;text-decoration:none;font-size:.95rem;line-height:1.15}"
+                  ".primary{background:#1769aa;color:white;border-color:#1769aa}.danger{background:#a51d25;color:white;border-color:#a51d25}.secondary{background:#eee}.actions form{margin:0}"
+                  ".notice{background:#fff8df;border:1px solid #ead28b;border-radius:10px;padding:10px 12px}.tableWrap{overflow-x:auto;background:white;border-radius:10px}table{border-collapse:collapse;width:100%;min-width:440px}td,th{border-bottom:1px solid #ddd;padding:10px;text-align:left}"
+                  "@media(max-width:520px){body{padding:12px}h1{font-size:1.45rem}.sessionHead{align-items:flex-start}.actions{display:grid;grid-template-columns:1fr 1fr}.btn,button{width:100%;text-align:center}.actions form{width:100%}}"
+                  "</style></head><body>");
   html += body;
   html += F("</body></html>");
   wifiServer.send(code, "text/html", html);
 }
 
 static void handleWifiRoot() {
-  String body = F("<h2>Toyota CYD v2.4.4 RC1 - Wi-Fi Files</h2><p>Logger runtime is offline. SD maintenance only.</p>");
-  body += "<p>Decoder metadata: Toyota Hybrid CAN DB v" + String(TOYOTA_CAN_DB_VERSION) + " (" + String(DB_DECODED_ID_COUNT) + " read-only definitions compiled).</p>";
-  body += F("<table><tr><th>Session</th><th>Size</th><th>Actions</th></tr>");
+  String body = F("<h1>Toyota CYD v2.4.4 RC1 - Wi-Fi Files</h1><p class='sub'>Logger runtime is offline. SD maintenance only.</p>");
+  body += "<p class='sub'>Toyota Hybrid CAN DB v" + String(TOYOTA_CAN_DB_VERSION) + " &middot; " + String(DB_DECODED_ID_COUNT) + " read-only definitions compiled</p>";
+  body += F("<div class='notice'><b>Preferred transfer:</b> Prepare a session ZIP, download it, then explicitly delete the temporary ZIP from the microSD. ZIPs are STORE archives (no compression) in RC1, so creation requires roughly the session size in free space.</div>");
+
   File root = SD.open("/CANLOG");
   if (root && root.isDirectory()) {
     File entry = root.openNextFile();
@@ -143,9 +163,23 @@ static void handleWifiRoot() {
         String name = slash >= 0 ? full.substring(slash + 1) : full;
         if (validSessionName(name)) {
           uint64_t bytes = directoryBytes(sessionPath(name));
-          body += "<tr><td><b>" + htmlEscape(name) + "</b>" + (bytes == 0 ? " (EMPTY / CLEARED)" : "") + "</td><td>" + humanBytes(bytes) + "</td><td>";
-          body += "<a class='btn' href='/session?s=" + name + "'>Files</a>";
-          body += "<a class='btn danger' href='/clear?s=" + name + "'>Clear contents</a></td></tr>";
+          String zp = zipPath(name);
+          uint64_t zbytes = fileBytes(zp);
+          bool zipReady = zbytes > 0;
+          body += "<div class='session'><div class='sessionHead'><div><div class='sessionName'>" + htmlEscape(name) + "</div>";
+          if (bytes == 0) body += "<div class='state'>EMPTY / CLEARED</div>";
+          else body += "<div class='state'>Session data ready</div>";
+          body += "</div><div class='size'>" + humanBytes(bytes) + "</div></div><div class='actions'>";
+          if (bytes > 0 && !zipReady) {
+            body += "<form method='POST' action='/zip-create'><input type='hidden' name='s' value='" + name + "'><button class='primary' type='submit'>Prepare ZIP</button></form>";
+          }
+          if (zipReady) {
+            body += "<a class='btn primary' href='/zip-download?s=" + name + "' target='_blank'>Download ZIP (" + humanBytes(zbytes) + ")</a>";
+            body += "<form method='POST' action='/zip-delete'><input type='hidden' name='s' value='" + name + "'><button class='secondary' type='submit'>Delete ZIP</button></form>";
+          }
+          body += "<a class='btn secondary' href='/session?s=" + name + "'>View files</a>";
+          if (bytes > 0) body += "<a class='btn danger' href='/clear?s=" + name + "'>Clear contents</a>";
+          body += "</div></div>";
         }
       }
       entry.close();
@@ -153,17 +187,17 @@ static void handleWifiRoot() {
     }
   }
   if (root) root.close();
-  body += F("</table><p><a class='btn' href='/exit'>EXIT / RESTART LOGGER</a></p>");
+  body += F("<p><a class='btn secondary' href='/exit'>EXIT / RESTART LOGGER</a></p>");
   sendPage(body);
 }
 
 static void handleWifiSession() {
   String s = wifiServer.arg("s");
-  if (!validSessionName(s)) { sendPage(F("<h3>Invalid session</h3>"), 400); return; }
+  if (!validSessionName(s)) { sendPage(F("<h2>Invalid session</h2>"), 400); return; }
   String path = sessionPath(s);
   File dir = SD.open(path.c_str());
-  if (!dir || !dir.isDirectory()) { if (dir) dir.close(); sendPage(F("<h3>Session not found</h3>"), 404); return; }
-  String body = "<h2>" + htmlEscape(s) + "</h2><table><tr><th>File</th><th>Size</th><th>Action</th></tr>";
+  if (!dir || !dir.isDirectory()) { if (dir) dir.close(); sendPage(F("<h2>Session not found</h2>"), 404); return; }
+  String body = "<h1>" + htmlEscape(s) + "</h1><div class='tableWrap'><table><tr><th>File</th><th>Size</th><th>Action</th></tr>";
   File f = dir.openNextFile();
   while (f) {
     if (!f.isDirectory()) {
@@ -176,7 +210,7 @@ static void handleWifiSession() {
     f = dir.openNextFile();
   }
   dir.close();
-  body += F("</table><p><a href='/'>Back</a></p>");
+  body += F("</table></div><p><a class='btn secondary' href='/'>Back</a></p>");
   sendPage(body);
 }
 
@@ -191,25 +225,85 @@ static void handleWifiDownload() {
   file.close();
 }
 
+static void handleWifiZipCreate() {
+  String s = wifiServer.arg("s");
+  if (!validSessionName(s)) { sendPage(F("<h2>Invalid session</h2>"), 400); return; }
+  String source = sessionPath(s);
+  uint64_t sourceBytes = directoryBytes(source);
+  if (sourceBytes == 0) { sendPage(F("<h2>Session is empty</h2><p>No ZIP was created.</p>"), 400); return; }
+  if (!ensureZipDirectory()) { sendPage(F("<h2>ZIP folder error</h2><p>Could not create /CANLOG/_ZIP.</p>"), 500); return; }
+
+  String zp = zipPath(s), error;
+  uint64_t zbytes = 0;
+  Serial.printf("# WIFI ZIP CREATE,%s,%llu bytes\n", s.c_str(), (unsigned long long)sourceBytes);
+  bool ok = buildStoredSessionZip(s, source, zp, sourceBytes, zbytes, error);
+  if (!ok) {
+    Serial.printf("# WIFI ZIP FAILED,%s,%s\n", s.c_str(), error.c_str());
+    sendPage("<h1>ZIP creation failed</h1><p>" + htmlEscape(error) + "</p><p><a class='btn secondary' href='/'>Back</a></p>", 500);
+    return;
+  }
+  Serial.printf("# WIFI ZIP READY,%s,%llu bytes\n", s.c_str(), (unsigned long long)zbytes);
+  String body = "<h1>ZIP ready: " + htmlEscape(s) + "</h1><p>Temporary archive size: <b>" + humanBytes(zbytes) + "</b>.</p>";
+  body += "<div class='notice'>Download the ZIP first. After you confirm it is on the phone/PC, return to this page and press <b>Delete temporary ZIP</b>. The firmware does not auto-delete it because HTTP completion does not prove the client saved the file.</div>";
+  body += "<div class='actions'><a class='btn primary' href='/zip-download?s=" + s + "' target='_blank'>Download " + s + ".zip</a>";
+  body += "<form method='POST' action='/zip-delete'><input type='hidden' name='s' value='" + s + "'><button class='danger' type='submit'>Delete temporary ZIP</button></form><a class='btn secondary' href='/'>Back</a></div>";
+  sendPage(body);
+}
+
+static void handleWifiZipDownload() {
+  String s = wifiServer.arg("s");
+  if (!validSessionName(s)) { wifiServer.send(400, "text/plain", "Invalid session"); return; }
+  String zp = zipPath(s);
+  File file = SD.open(zp.c_str(), FILE_READ);
+  if (!file || file.isDirectory()) { if (file) file.close(); wifiServer.send(404, "text/plain", "ZIP not prepared"); return; }
+  wifiServer.sendHeader("Content-Disposition", "attachment; filename=\"" + s + ".zip\"");
+  wifiServer.streamFile(file, "application/zip");
+  file.close();
+  Serial.printf("# WIFI ZIP STREAMED,%s\n", s.c_str());
+}
+
+static void handleWifiZipDelete() {
+  String s = wifiServer.arg("s");
+  if (!validSessionName(s)) { sendPage(F("<h2>Invalid session</h2>"), 400); return; }
+  String zp = zipPath(s);
+  uint64_t before = fileBytes(zp);
+  if (before == 0) { sendPage("<h1>No temporary ZIP</h1><p>" + htmlEscape(s) + ".zip is not present.</p><p><a class='btn secondary' href='/'>Back</a></p>"); return; }
+  if (!SD.remove(zp.c_str())) { sendPage(F("<h1>ZIP delete failed</h1><p>The temporary ZIP remains on the microSD.</p>"), 500); return; }
+  Serial.printf("# WIFI ZIP DELETED,%s,%llu bytes\n", s.c_str(), (unsigned long long)before);
+  sendPage("<h1>Temporary ZIP deleted</h1><p>Freed <b>" + humanBytes(before) + "</b>. Session data was not changed.</p><p><a class='btn secondary' href='/'>Back</a></p>");
+}
+
 static void handleWifiClearRequest() {
   String s = wifiServer.arg("s");
-  if (!validSessionName(s)) { sendPage(F("<h3>Invalid session</h3>"), 400); return; }
+  if (!validSessionName(s)) { sendPage(F("<h2>Invalid session</h2>"), 400); return; }
   wifiPendingClear = s;
   wifiConfirmPending = true;
-  String body = "<h2>Confirm clear</h2><p>Delete all contents of <b>" + htmlEscape(s) + "</b> but KEEP the empty session folder?</p>";
-  body += "<form method='POST' action='/clear-confirm'><input type='hidden' name='s' value='" + s + "'><button class='danger' type='submit'>CLEAR CONTENTS OF " + s + "</button></form><p><a href='/'>Cancel</a></p>";
+  String body = "<h1>Confirm clear</h1><p>Clear contents of <b>" + htmlEscape(s) + "</b> while keeping the empty <b>" + htmlEscape(s) + "</b> folder for session-number continuity?</p>";
+  if (fileBytes(zipPath(s)) > 0) body += F("<div class='notice'>A temporary ZIP for this session also exists. It will be deleted first so cleared data is not left behind in /CANLOG/_ZIP.</div>");
+  body += "<div class='actions'><form method='POST' action='/clear-confirm'><input type='hidden' name='s' value='" + s + "'><button class='danger' type='submit'>CLEAR CONTENTS OF " + s + "</button></form><a class='btn secondary' href='/'>Cancel</a></div>";
   sendPage(body);
 }
 
 static void handleWifiClearConfirm() {
   String s = wifiServer.arg("s");
-  if (!wifiConfirmPending || s != wifiPendingClear || !validSessionName(s)) { sendPage(F("<h3>Confirmation expired or invalid.</h3>"), 400); return; }
+  if (!wifiConfirmPending || s != wifiPendingClear || !validSessionName(s)) { sendPage(F("<h2>Confirmation expired or invalid.</h2>"), 400); return; }
   wifiConfirmPending = false;
   wifiPendingClear = "";
   String path = sessionPath(s);
+  uint64_t sourceBefore = directoryBytes(path);
+  String zp = zipPath(s);
+  uint64_t zipBefore = fileBytes(zp);
+  if (zipBefore > 0 && !SD.remove(zp.c_str())) {
+    sendPage(F("<h1>Clear stopped</h1><p>Temporary ZIP could not be removed, so session contents were not cleared.</p>"), 500);
+    return;
+  }
   bool ok = clearDirectoryContents(path);
-  if (ok && SD.exists(path.c_str())) sendPage("<h2>Cleared " + htmlEscape(s) + "</h2><p>Session folder retained for v2.4.2 numbering continuity.</p><p><a href='/'>Back</a></p>");
-  else sendPage("<h2>Clear incomplete</h2><p>Stopped on SD error. The session folder was not intentionally removed.</p><p><a href='/'>Back</a></p>", 500);
+  if (ok && SD.exists(path.c_str())) {
+    uint64_t freed = sourceBefore + zipBefore;
+    sendPage("<h1>Cleared " + htmlEscape(s) + "</h1><p>Freed approximately <b>" + humanBytes(freed) + "</b>. The empty session folder was retained for v2.4.2 numbering continuity.</p><p><a class='btn secondary' href='/'>Back</a></p>");
+  } else {
+    sendPage("<h1>Clear incomplete</h1><p>Stopped on SD error. The session folder was not intentionally removed.</p><p><a class='btn secondary' href='/'>Back</a></p>", 500);
+  }
 }
 
 static void handleWifiExit() {
@@ -256,6 +350,9 @@ static void enterWifiMaintenanceMode() {
   wifiServer.on("/", HTTP_GET, handleWifiRoot);
   wifiServer.on("/session", HTTP_GET, handleWifiSession);
   wifiServer.on("/download", HTTP_GET, handleWifiDownload);
+  wifiServer.on("/zip-create", HTTP_POST, handleWifiZipCreate);
+  wifiServer.on("/zip-download", HTTP_GET, handleWifiZipDownload);
+  wifiServer.on("/zip-delete", HTTP_POST, handleWifiZipDelete);
   wifiServer.on("/clear", HTTP_GET, handleWifiClearRequest);
   wifiServer.on("/clear-confirm", HTTP_POST, handleWifiClearConfirm);
   wifiServer.on("/exit", HTTP_GET, handleWifiExit);
@@ -346,9 +443,6 @@ void loop() {
     return;
   }
 
-  // RC1 owns touch first. If this touch release enters Wi-Fi mode, do not let
-  // the v2.4.2 loop execute even once afterward: it would redraw the logger UI
-  // over the just-rendered Wi-Fi SSID/password/IP screen after CAN/BLE teardown.
   handleTouch();
   if (wifiMaintenanceMode) {
     wifiServer.handleClient();
