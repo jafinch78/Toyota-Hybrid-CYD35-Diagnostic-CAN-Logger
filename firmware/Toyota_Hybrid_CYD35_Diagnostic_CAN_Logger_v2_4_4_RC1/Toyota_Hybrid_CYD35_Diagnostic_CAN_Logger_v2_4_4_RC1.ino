@@ -13,13 +13,15 @@
       preserved. CLEAR removes contents of selected Sxxxx folders but leaves the
       empty session folder, so the original first-unused-folder sequence does not
       reuse cleared session numbers.
+    - Toyota Hybrid CAN Database v0.5.5 read-only decoded-ID/profile metadata is
+      compiled in for Gen 2, Gen 3 profile metadata, PHV Gen 1, and Camry Hybrid.
+      No new automatic transmit workflow is enabled by the database manifest.
 */
 
 #include <WiFi.h>
 #include <WebServer.h>
+#include "database_v0_5_5_decoded_ids.h"
 
-// Rename only the v2.4.2 integration points. All acquisition/storage functions
-// retain their exact v2.4.2 bodies in the included source.
 #define setup logger242_setup
 #define loop logger242_loop
 #define handleTouch logger242_handleTouch
@@ -110,7 +112,7 @@ static bool clearDirectoryContents(const String &path) {
     } else if (!SD.remove(childPath.c_str())) {
       ok = false;
     }
-    if (!ok) break;  // fail closed: do not silently continue a partial bulk clear
+    if (!ok) break;
     f = dir.openNextFile();
   }
   dir.close();
@@ -121,15 +123,16 @@ static void sendPage(const String &body, int code = 200) {
   String html = F("<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'>"
                   "<title>Toyota CYD Wi-Fi Files</title><style>body{font-family:sans-serif;max-width:900px;margin:24px auto;padding:0 12px}"
                   "table{border-collapse:collapse;width:100%}td,th{border-bottom:1px solid #ccc;padding:8px;text-align:left}"
-                  "button,a.btn{padding:8px 12px;margin:3px;text-decoration:none} .danger{background:#b00020;color:white}</style></head><body>");
+                  "button,a.btn{padding:8px 12px;margin:3px;text-decoration:none}.danger{background:#b00020;color:white}</style></head><body>");
   html += body;
   html += F("</body></html>");
   wifiServer.send(code, "text/html", html);
 }
 
 static void handleWifiRoot() {
-  String body = F("<h2>Toyota CYD v2.4.4 RC1 - Wi-Fi Files</h2><p>Logger runtime is offline. SD maintenance only.</p>"
-                  "<table><tr><th>Session</th><th>Size</th><th>Actions</th></tr>");
+  String body = F("<h2>Toyota CYD v2.4.4 RC1 - Wi-Fi Files</h2><p>Logger runtime is offline. SD maintenance only.</p>");
+  body += "<p>Decoder metadata: Toyota Hybrid CAN DB v" + String(TOYOTA_CAN_DB_VERSION) + " (" + String(DB_DECODED_ID_COUNT) + " read-only definitions compiled).</p>";
+  body += F("<table><tr><th>Session</th><th>Size</th><th>Actions</th></tr>");
   File root = SD.open("/CANLOG");
   if (root && root.isDirectory()) {
     File entry = root.openNextFile();
@@ -205,7 +208,6 @@ static void handleWifiClearConfirm() {
   wifiPendingClear = "";
   String path = sessionPath(s);
   bool ok = clearDirectoryContents(path);
-  // The selected Sxxxx directory itself is intentionally never removed.
   if (ok && SD.exists(path.c_str())) sendPage("<h2>Cleared " + htmlEscape(s) + "</h2><p>Session folder retained for v2.4.2 numbering continuity.</p><p><a href='/'>Back</a></p>");
   else sendPage("<h2>Clear incomplete</h2><p>Stopped on SD error. The session folder was not intentionally removed.</p><p><a href='/'>Back</a></p>", 500);
 }
@@ -217,8 +219,6 @@ static void handleWifiExit() {
 }
 
 static void shutdownLoggerServicesForWifi() {
-  // Entry is allowed only while logging is stopped. Force diagnostics passive
-  // before tearing the CAN runtime down.
   diagnosticEnabled = false;
   fastDiagActive = false;
   if (canReceiveTaskHandle != nullptr) {
@@ -268,11 +268,10 @@ static void enterWifiMaintenanceMode() {
   tft.drawString(String("SSID: ") + wifiApSsid, 20, 80, 2);
   tft.drawString(String("PASS: ") + wifiApPassword, 20, 110, 2);
   tft.drawString(String("OPEN: http://") + WiFi.softAPIP().toString(), 20, 140, 2);
-  tft.drawString("EXIT from browser restarts logger", 20, 190, 2);
+  tft.drawString(String("CAN DB: v") + TOYOTA_CAN_DB_VERSION, 20, 170, 2);
+  tft.drawString("EXIT from browser restarts logger", 20, 200, 2);
 }
 
-// v2.4.2 UI with one additive maintenance button in the previously unused
-// center-bottom area. Logger/diagnostic/page button geometry remains unchanged.
 void drawButtons() {
   logger242_drawButtons();
   if (wifiMaintenanceMode) return;
@@ -288,8 +287,6 @@ void drawButtons() {
 void updateDisplay() {
   if (wifiMaintenanceMode) return;
   logger242_updateDisplay();
-  // logger242_updateDisplay() calls the renamed v2.4.2 drawButtons(); overlay
-  // the additive maintenance control after the exact v2.4.2 display rendering.
   drawButtons();
 }
 
@@ -320,7 +317,6 @@ void handleTouch() {
     return;
   }
 
-  // Preserve the v2.4.2 actions exactly for its three original button regions.
   bool logButton = touchDownX >= CYD_LOG_BTN_X && touchDownX < CYD_LOG_BTN_X + CYD_LOG_BTN_W && touchDownY >= CYD_LOG_BTN_Y && touchDownY < CYD_LOG_BTN_Y + CYD_LOG_BTN_H;
   bool diagButton = touchDownX >= CYD_DIAG_BTN_X && touchDownX < CYD_DIAG_BTN_X + CYD_DIAG_BTN_W && touchDownY >= CYD_DIAG_BTN_Y && touchDownY < CYD_DIAG_BTN_Y + CYD_DIAG_BTN_H;
   bool pageButton = touchDownX >= CYD_PAGE_BTN_X && touchDownX < CYD_PAGE_BTN_X + CYD_PAGE_BTN_W && touchDownY >= CYD_PAGE_BTN_Y && touchDownY < CYD_PAGE_BTN_Y + CYD_PAGE_BTN_H;
@@ -337,9 +333,9 @@ void handleTouch() {
 }
 
 void setup() {
-  // Exact v2.4.2 initialization. Wi-Fi is not touched here.
   logger242_setup();
-  Serial.println("# v2.4.4 RC1 wrapper ready; Wi-Fi remains OFF until touchscreen request");
+  Serial.printf("# v2.4.4 RC1 wrapper ready; Wi-Fi OFF; CAN DB v%s; decoded IDs=%u\n",
+                TOYOTA_CAN_DB_VERSION, (unsigned)DB_DECODED_ID_COUNT);
   updateDisplay();
 }
 
@@ -349,9 +345,13 @@ void loop() {
     delay(1);
     return;
   }
-  // Exact v2.4.2 loop body executes while Wi-Fi maintenance is false. Its calls
-  // to handleTouch/updateDisplay resolve to the renamed v2.4.2 implementations,
-  // so we additionally poll the RC1 touch wrapper at the same loop cadence.
-  logger242_loop();
+
+  // RC1 owns touch first. On a press it sets the same v2.4.2 touch state;
+  // on release it consumes the action before logger242_loop() reaches the
+  // renamed original handler. This prevents the v2.4.2 handler from consuming
+  // the release before the additive WIFI FILES button can see it.
   handleTouch();
+  uint32_t displayStampBefore = lastDisplayMs;
+  logger242_loop();
+  if (lastDisplayMs != displayStampBefore && !wifiMaintenanceMode) drawButtons();
 }
