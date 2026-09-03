@@ -346,11 +346,16 @@ void loop() {
     return;
   }
 
-  // RC1 owns touch first. On a press it sets the same v2.4.2 touch state;
-  // on release it consumes the action before logger242_loop() reaches the
-  // renamed original handler. This prevents the v2.4.2 handler from consuming
-  // the release before the additive WIFI FILES button can see it.
+  // RC1 owns touch first. If this touch release enters Wi-Fi mode, do not let
+  // the v2.4.2 loop execute even once afterward: it would redraw the logger UI
+  // over the just-rendered Wi-Fi SSID/password/IP screen after CAN/BLE teardown.
   handleTouch();
+  if (wifiMaintenanceMode) {
+    wifiServer.handleClient();
+    delay(1);
+    return;
+  }
+
   uint32_t displayStampBefore = lastDisplayMs;
   logger242_loop();
   if (lastDisplayMs != displayStampBefore && !wifiMaintenanceMode) drawButtons();
