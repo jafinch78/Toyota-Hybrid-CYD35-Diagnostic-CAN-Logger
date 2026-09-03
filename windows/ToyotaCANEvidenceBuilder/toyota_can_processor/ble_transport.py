@@ -14,7 +14,7 @@ RESPONSE_UUID = "6ed9f000-4f21-4c8c-a8a7-923c86b40003"
 
 
 class BleakTransport:
-    """Modern-Windows transport used by the existing capture path."""
+    """Modern-Windows transport used by the established capture path."""
 
     def __init__(self, notification: Callable[[Any, bytearray], None]) -> None:
         self.notification = notification
@@ -61,8 +61,8 @@ class Win1607BridgeTransport:
     """Transport adapter for the external Win1607_BLE_Bridge.exe helper.
 
     The helper owns only legacy WinRT GATT operations. Packet semantics and
-    timing remain in Python. RX callbacks are dispatched immediately when a
-    bridge notification line is read.
+    synchronization fitting remain in Python. RX callbacks are dispatched as
+    soon as bridge notification lines are read.
     """
 
     def __init__(self, notification: Callable[[Any, bytearray], None], executable: Path) -> None:
@@ -82,14 +82,29 @@ class Win1607BridgeTransport:
         self.events = asyncio.Queue()
         self.process = subprocess.Popen(
             [str(self.executable)], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE, text=True, bufsize=1,
+            stderr=subprocess.STDOUT, text=True, bufsize=1,
         )
         self.reader = threading.Thread(target=self._read_stdout, daemon=True)
         self.reader.start()
+
+        ready = await asyncio.wait_for(self.events.get(), timeout=min(timeout, 5.0))
+        if not ready.startswith("READY "):
+            await self.close()
+            raise RuntimeError(f"Windows 1607 BLE bridge did not become ready: {ready}")
+
         self._send("CONNECT AUTO")
         line = await asyncio.wait_for(self.events.get(), timeout=timeout)
         if not line.startswith("OK CONNECTED"):
+            await self.close()
             raise RuntimeError(f"Windows 1607 BLE bridge connect failed: {line}")
+
+        details = line[len("OK CONNECTED"):].strip()
+        if details:
+            fields = details.split("\t", 1)
+            if fields[0]:
+                self.name = fields[0]
+            if len(fields) == 2 and fields[1]:
+                self.address = fields[1]
 
     def _read_stdout(self) -> None:
         if not self.process or not self.process.stdout:
@@ -114,31 +129,39 @@ class Win1607BridgeTransport:
     async def write(self, payload: bytes) -> None:
         if not self.events:
             raise RuntimeError("Windows 1607 BLE bridge is not connected")
+        if len(payload) not in (4, 8):
+            raise RuntimeError("ToyotaCYD-Sync/1 command must be 4 or 8 bytes")
         self._send("WRITE " + payload.hex())
         line = await asyncio.wait_for(self.events.get(), timeout=5.0)
         if not line.startswith("OK WRITE"):
             raise RuntimeError(f"Windows 1607 BLE bridge write failed: {line}")
 
     async def close(self) -> None:
-        if not self.process:
+        process = self.process
+        if not process:
             return
         try:
-            self._send("DISCONNECT")
-            self._send("QUIT")
+            if process.poll() is None:
+                self._send("DISCONNECT")
+                self._send("QUIT")
         except Exception:
             pass
         try:
-            self.process.wait(timeout=3)
+            process.wait(timeout=3)
         except subprocess.TimeoutExpired:
-            self.process.terminate()
+            process.terminate()
+            try:
+                process.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                process.kill()
         self.process = None
 
 
 def make_transport(notification: Callable[[Any, bytearray], None]):
-    """Select the bridge only when explicitly requested.
+    """Select Win1607 bridge only when explicitly requested.
 
-    Keeping selection explicit prevents an unvalidated bridge binary from
-    silently changing the established Bleak capture path.
+    Explicit selection prevents an unvalidated native bridge from silently
+    changing the established Bleak path on modern Windows.
     """
     backend = os.environ.get("TOYOTA_BLE_BACKEND", "bleak").strip().lower()
     if backend == "win1607":
