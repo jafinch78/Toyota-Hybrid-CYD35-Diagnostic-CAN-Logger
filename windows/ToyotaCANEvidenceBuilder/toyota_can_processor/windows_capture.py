@@ -14,10 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
-
-SERVICE_UUID = "6ed9f000-4f21-4c8c-a8a7-923c86b40001"
-COMMAND_UUID = "6ed9f000-4f21-4c8c-a8a7-923c86b40002"
-RESPONSE_UUID = "6ed9f000-4f21-4c8c-a8a7-923c86b40003"
+from .ble_transport import make_transport
 
 
 class CydBleClient:
@@ -30,32 +27,15 @@ class CydBleClient:
         self.address = ""
 
     async def connect(self, timeout: float = 15.0) -> None:
-        try:
-            from bleak import BleakClient, BleakScanner
-        except ImportError as error:
-            raise RuntimeError("Windows BLE capture requires: py -m pip install bleak") from error
         self.loop = asyncio.get_running_loop()
-
-        def filter_device(device, advertisement) -> bool:
-            services = [item.lower() for item in (advertisement.service_uuids or [])]
-            return SERVICE_UUID in services or (device.name or "").startswith("ToyotaCYD-")
-
-        device = await BleakScanner.find_device_by_filter(filter_device, timeout=timeout)
-        if device is None:
-            raise RuntimeError("No ToyotaCYD BLE logger was found")
-        self.name = device.name or "ToyotaCYD"
-        self.address = str(device.address)
-        self.client = BleakClient(device)
-        await self.client.connect()
-        await self.client.start_notify(RESPONSE_UUID, self._notification)
+        self.client = make_transport(self._notification)
+        await self.client.connect(timeout=timeout)
+        self.name = self.client.name
+        self.address = self.client.address
 
     async def close(self) -> None:
         if self.client:
-            try:
-                await self.client.stop_notify(RESPONSE_UUID)
-            except Exception:
-                pass
-            await self.client.disconnect()
+            await self.client.close()
             self.client = None
 
     def _next(self) -> int:
@@ -104,7 +84,7 @@ class CydBleClient:
         future = asyncio.get_running_loop().create_future()
         send_ns = time.perf_counter_ns()
         self.pending[sequence] = ("sync", send_ns, future)
-        await self.client.write_gatt_char(COMMAND_UUID, struct.pack("<BBH", 1, 1, sequence), response=False)
+        await self.client.write(struct.pack("<BBH", 1, 1, sequence))
         try:
             return await asyncio.wait_for(future, timeout=2.0)
         except Exception:
@@ -119,7 +99,7 @@ class CydBleClient:
         send_ns = time.perf_counter_ns()
         self.pending[sequence] = (f"control:{operation}", send_ns, future)
         payload = struct.pack("<BBHBBH", 2, 1, sequence, opcode, 0, marker)
-        await self.client.write_gatt_char(COMMAND_UUID, payload, response=False)
+        await self.client.write(payload)
         try:
             return await asyncio.wait_for(future, timeout=5.0)
         except Exception:
