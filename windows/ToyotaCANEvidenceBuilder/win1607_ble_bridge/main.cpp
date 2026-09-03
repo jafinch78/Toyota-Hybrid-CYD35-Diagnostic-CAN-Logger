@@ -3,8 +3,9 @@
 // Build as C++/CX (/ZW) against the Windows 10 SDK 10.0.14393.0.
 
 #include <windows.h>
+#include <roapi.h>
 #include <collection.h>
-#include <concrt.h>
+#include <ppltasks.h>
 #include <iostream>
 #include <iomanip>
 #include <mutex>
@@ -255,9 +256,17 @@ private:
 } // namespace
 
 int main() {
+    HRESULT init = RoInitialize(RO_INIT_MULTITHREADED);
+    const bool uninitialize = SUCCEEDED(init);
+    if (FAILED(init) && init != RPC_E_CHANGED_MODE) {
+        std::ostringstream message;
+        message << "ERR INIT RoInitialize failed HRESULT=0x" << std::hex << static_cast<unsigned long>(init);
+        emit_line(message.str());
+        return 2;
+    }
+
     LegacyBleTransport ble;
     std::string line;
-
     emit_line("READY Win1607_BLE_Bridge protocol=1");
 
     while (std::getline(std::cin, line)) {
@@ -295,5 +304,6 @@ int main() {
     }
 
     ble.disconnect();
+    if (uninitialize) RoUninitialize();
     return 0;
 }
