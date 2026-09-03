@@ -2,6 +2,7 @@
 // Transport-only ToyotaCYD-Sync/1 bridge for Windows 10 1607 / build 14393.
 // Build as C++/CX (/ZW) against the Windows 10 SDK 10.0.14393.0.
 
+#include <windows.h>
 #include <collection.h>
 #include <concrt.h>
 #include <iostream>
@@ -79,7 +80,8 @@ std::vector<unsigned char> read_buffer(IBuffer^ buffer) {
     DataReader^ reader = DataReader::FromBuffer(buffer);
     auto array = ref new Array<unsigned char>(buffer->Length);
     reader->ReadBytes(array);
-    bytes.assign(array->begin(), array->end());
+    bytes.reserve(array->Length);
+    for (unsigned int i = 0; i < array->Length; ++i) bytes.push_back(array[i]);
     return bytes;
 }
 
@@ -96,7 +98,6 @@ GattCharacteristic^ find_characteristic(GattDeviceService^ service, Guid uuid) {
 class LegacyBleTransport {
 public:
     LegacyBleTransport() : connected_(false), notification_token_{} {}
-
     ~LegacyBleTransport() { disconnect(); }
 
     bool connect_auto(std::string& error) {
@@ -246,7 +247,7 @@ private:
     GattDeviceService^ service_ = nullptr;
     GattCharacteristic^ command_ = nullptr;
     GattCharacteristic^ response_ = nullptr;
-    EventRegistrationToken notification_token_;
+    Windows::Foundation::EventRegistrationToken notification_token_;
     std::string device_name_;
     std::string device_id_;
 };
