@@ -20,8 +20,10 @@
 
 #include <WiFi.h>
 #include <WebServer.h>
+#include <esp_wifi.h>
 #include "database_v0_5_5_decoded_ids.h"
 #include "wifi_session_zip.h"
+#include "wifi_session_zip_async.h"
 
 #define setup logger242_setup
 #define loop logger242_loop
@@ -39,13 +41,17 @@ constexpr int CYD_WIFI_BTN_X = 125;
 constexpr int CYD_WIFI_BTN_Y = 258;
 constexpr int CYD_WIFI_BTN_W = 105;
 constexpr int CYD_WIFI_BTN_H = 50;
+constexpr uint8_t CYD_WIFI_CHANNEL = 6;
+constexpr uint8_t CYD_WIFI_MAX_CLIENTS = 4;
 
 WebServer wifiServer(80);
 bool wifiMaintenanceMode = false;
 bool wifiConfirmPending = false;
+bool wifiZipCompletionLogged = false;
 String wifiPendingClear;
 char wifiApSsid[32] = {0};
 char wifiApPassword[20] = {0};
+uint32_t lastWifiUiMs = 0;
 
 static String htmlEscape(const String &s) {
   String out;
@@ -150,7 +156,20 @@ static void sendPage(const String &body, int code = 200) {
 
 static void handleWifiRoot() {
   String body = F("<h1>Toyota CYD v2.4.4 RC1 - Wi-Fi Files</h1><p class='sub'>Logger runtime is offline. SD maintenance only.</p>");
-  body += "<p class='sub'>Toyota Hybrid CAN DB v" + String(TOYOTA_CAN_DB_VERSION) + " &middot; " + String(DB_DECODED_ID_COUNT) + " read-only definitions compiled</p>";
+  body += "<p class='sub'>Toyota Hybrid CAN DB v" + String(TOYOTA_CAN_DB_VERSION) + " &middot; " + String(DB_DECODED_ID_COUNT) + " read-only definitions compiled &middot; AP channel " + String(CYD_WIFI_CHANNEL) + " &middot; Wi-Fi sleep OFF</p>";
+
+  if (storedSessionZipAsyncBusy()) {
+    String s = storedSessionZipAsyncSession();
+    body += "<div class='notice'><b>Preparing " + htmlEscape(s) + ".zip:</b> " + String(storedSessionZipAsyncProgress()) + "% complete. The ZIP is being written cooperatively so Wi-Fi/HTTP can continue to run.</div>";
+    body += "<div class='actions'><form method='POST' action='/zip-cancel'><button class='danger' type='submit'>Cancel ZIP</button></form><a class='btn secondary' href='/exit'>EXIT / RESTART LOGGER</a></div>";
+    body += F("<script>setTimeout(function(){location.reload();},1500);</script>");
+    sendPage(body);
+    return;
+  }
+
+  if (storedSessionZipAsyncFailed()) {
+    body += "<div class='notice'><b>Last ZIP error:</b> " + htmlEscape(storedSessionZipAsyncError()) + "</div>";
+  }
   body += F("<div class='notice'><b>Preferred transfer:</b> Prepare a session ZIP, download it, then explicitly delete the temporary ZIP from the microSD. ZIPs are STORE archives (no compression) in RC1, so creation requires roughly the session size in free space.</div>");
 
   File root = SD.open("/CANLOG");
@@ -192,6 +211,7 @@ static void handleWifiRoot() {
 }
 
 static void handleWifiSession() {
+  if (storedSessionZipAsyncBusy()) { wifiServer.send(409, "text/plain", "ZIP preparation in progress; retry shortly."); return; }
   String s = wifiServer.arg("s");
   if (!validSessionName(s)) { sendPage(F("<h2>Invalid session</h2>"), 400); return; }
   String path = sessionPath(s);
@@ -215,6 +235,7 @@ static void handleWifiSession() {
 }
 
 static void handleWifiDownload() {
+  if (storedSessionZipAsyncBusy()) { wifiServer.send(409, "text/plain", "ZIP preparation in progress; retry shortly."); return; }
   String s = wifiServer.arg("s"), f = wifiServer.arg("f");
   if (!validSessionName(s) || !validFileName(f)) { wifiServer.send(400, "text/plain", "Invalid path"); return; }
   String path = sessionPath(s) + "/" + f;
@@ -228,29 +249,27 @@ static void handleWifiDownload() {
 static void handleWifiZipCreate() {
   String s = wifiServer.arg("s");
   if (!validSessionName(s)) { sendPage(F("<h2>Invalid session</h2>"), 400); return; }
+  if (storedSessionZipAsyncBusy()) { sendPage(F("<h2>A ZIP is already being prepared.</h2>"), 409); return; }
   String source = sessionPath(s);
   uint64_t sourceBytes = directoryBytes(source);
   if (sourceBytes == 0) { sendPage(F("<h2>Session is empty</h2><p>No ZIP was created.</p>"), 400); return; }
   if (!ensureZipDirectory()) { sendPage(F("<h2>ZIP folder error</h2><p>Could not create /CANLOG/_ZIP.</p>"), 500); return; }
 
-  String zp = zipPath(s), error;
-  uint64_t zbytes = 0;
-  Serial.printf("# WIFI ZIP CREATE,%s,%llu bytes\n", s.c_str(), (unsigned long long)sourceBytes);
-  bool ok = buildStoredSessionZip(s, source, zp, sourceBytes, zbytes, error);
-  if (!ok) {
-    Serial.printf("# WIFI ZIP FAILED,%s,%s\n", s.c_str(), error.c_str());
+  String error;
+  String zp = zipPath(s);
+  Serial.printf("# WIFI ZIP ASYNC START,%s,%llu bytes\n", s.c_str(), (unsigned long long)sourceBytes);
+  if (!startStoredSessionZipAsync(s, source, zp, sourceBytes, error)) {
+    Serial.printf("# WIFI ZIP ASYNC FAILED_TO_START,%s,%s\n", s.c_str(), error.c_str());
     sendPage("<h1>ZIP creation failed</h1><p>" + htmlEscape(error) + "</p><p><a class='btn secondary' href='/'>Back</a></p>", 500);
     return;
   }
-  Serial.printf("# WIFI ZIP READY,%s,%llu bytes\n", s.c_str(), (unsigned long long)zbytes);
-  String body = "<h1>ZIP ready: " + htmlEscape(s) + "</h1><p>Temporary archive size: <b>" + humanBytes(zbytes) + "</b>.</p>";
-  body += "<div class='notice'>Download the ZIP first. After you confirm it is on the phone/PC, return to this page and press <b>Delete temporary ZIP</b>. The firmware does not auto-delete it because HTTP completion does not prove the client saved the file.</div>";
-  body += "<div class='actions'><a class='btn primary' href='/zip-download?s=" + s + "' target='_blank'>Download " + s + ".zip</a>";
-  body += "<form method='POST' action='/zip-delete'><input type='hidden' name='s' value='" + s + "'><button class='danger' type='submit'>Delete temporary ZIP</button></form><a class='btn secondary' href='/'>Back</a></div>";
-  sendPage(body);
+  wifiZipCompletionLogged = false;
+  wifiServer.sendHeader("Location", "/");
+  wifiServer.send(303, "text/plain", "ZIP preparation started");
 }
 
 static void handleWifiZipDownload() {
+  if (storedSessionZipAsyncBusy()) { wifiServer.send(409, "text/plain", "ZIP preparation still in progress."); return; }
   String s = wifiServer.arg("s");
   if (!validSessionName(s)) { wifiServer.send(400, "text/plain", "Invalid session"); return; }
   String zp = zipPath(s);
@@ -263,6 +282,7 @@ static void handleWifiZipDownload() {
 }
 
 static void handleWifiZipDelete() {
+  if (storedSessionZipAsyncBusy()) { sendPage(F("<h2>ZIP preparation is active. Cancel or wait before deleting.</h2>"), 409); return; }
   String s = wifiServer.arg("s");
   if (!validSessionName(s)) { sendPage(F("<h2>Invalid session</h2>"), 400); return; }
   String zp = zipPath(s);
@@ -270,10 +290,22 @@ static void handleWifiZipDelete() {
   if (before == 0) { sendPage("<h1>No temporary ZIP</h1><p>" + htmlEscape(s) + ".zip is not present.</p><p><a class='btn secondary' href='/'>Back</a></p>"); return; }
   if (!SD.remove(zp.c_str())) { sendPage(F("<h1>ZIP delete failed</h1><p>The temporary ZIP remains on the microSD.</p>"), 500); return; }
   Serial.printf("# WIFI ZIP DELETED,%s,%llu bytes\n", s.c_str(), (unsigned long long)before);
-  sendPage("<h1>Temporary ZIP deleted</h1><p>Freed <b>" + humanBytes(before) + "</b>. Session data was not changed.</p><p><a class='btn secondary' href='/'>Back</a></p>");
+  wifiServer.sendHeader("Location", "/");
+  wifiServer.send(303, "text/plain", "Temporary ZIP deleted");
+}
+
+static void handleWifiZipCancel() {
+  if (storedSessionZipAsyncBusy()) {
+    String s = storedSessionZipAsyncSession();
+    cancelStoredSessionZipAsync();
+    Serial.printf("# WIFI ZIP CANCELLED,%s\n", s.c_str());
+  }
+  wifiServer.sendHeader("Location", "/");
+  wifiServer.send(303, "text/plain", "ZIP preparation cancelled");
 }
 
 static void handleWifiClearRequest() {
+  if (storedSessionZipAsyncBusy()) { sendPage(F("<h2>ZIP preparation is active. Cancel or wait before clearing.</h2>"), 409); return; }
   String s = wifiServer.arg("s");
   if (!validSessionName(s)) { sendPage(F("<h2>Invalid session</h2>"), 400); return; }
   wifiPendingClear = s;
@@ -285,6 +317,7 @@ static void handleWifiClearRequest() {
 }
 
 static void handleWifiClearConfirm() {
+  if (storedSessionZipAsyncBusy()) { sendPage(F("<h2>ZIP preparation is active. Clear refused.</h2>"), 409); return; }
   String s = wifiServer.arg("s");
   if (!wifiConfirmPending || s != wifiPendingClear || !validSessionName(s)) { sendPage(F("<h2>Confirmation expired or invalid.</h2>"), 400); return; }
   wifiConfirmPending = false;
@@ -307,9 +340,41 @@ static void handleWifiClearConfirm() {
 }
 
 static void handleWifiExit() {
+  if (storedSessionZipAsyncBusy()) cancelStoredSessionZipAsync();
   wifiServer.send(200, "text/plain", "Restarting logger...");
   delay(250);
   ESP.restart();
+}
+
+static void wifiEventHandler(WiFiEvent_t event, WiFiEventInfo_t info) {
+  if (event == ARDUINO_EVENT_WIFI_AP_STACONNECTED) {
+    const wifi_event_ap_staconnected_t &e = info.wifi_ap_staconnected;
+    Serial.printf("# WIFI STA CONNECTED,%02X:%02X:%02X:%02X:%02X:%02X,AID=%u\n",
+                  e.mac[0], e.mac[1], e.mac[2], e.mac[3], e.mac[4], e.mac[5], (unsigned)e.aid);
+  } else if (event == ARDUINO_EVENT_WIFI_AP_STADISCONNECTED) {
+    const wifi_event_ap_stadisconnected_t &e = info.wifi_ap_stadisconnected;
+    Serial.printf("# WIFI STA DISCONNECTED,%02X:%02X:%02X:%02X:%02X:%02X,AID=%u,REASON=%u\n",
+                  e.mac[0], e.mac[1], e.mac[2], e.mac[3], e.mac[4], e.mac[5],
+                  (unsigned)e.aid, (unsigned)e.reason);
+  }
+}
+
+static void serviceWifiMaintenanceUi() {
+  uint32_t nowMs = millis();
+  if (nowMs - lastWifiUiMs < 500) return;
+  lastWifiUiMs = nowMs;
+  uint8_t clients = (uint8_t)WiFi.softAPgetStationNum();
+
+  tft.fillRect(15, 225, 455, 55, TFT_BLACK);
+  tft.setTextColor(TFT_WHITE, TFT_BLACK);
+  tft.drawString(String("Clients: ") + clients + "   CH: " + CYD_WIFI_CHANNEL + "   Sleep: OFF", 20, 228, 2);
+  if (storedSessionZipAsyncBusy()) {
+    tft.drawString(String("ZIP ") + storedSessionZipAsyncSession() + ": " + storedSessionZipAsyncProgress() + "%", 20, 252, 2);
+  } else if (storedSessionZipAsyncDone()) {
+    tft.drawString(String("ZIP ready: ") + storedSessionZipAsyncSession(), 20, 252, 2);
+  } else if (storedSessionZipAsyncFailed()) {
+    tft.drawString("ZIP last result: stopped/error", 20, 252, 2);
+  }
 }
 
 static void shutdownLoggerServicesForWifi() {
@@ -339,26 +404,36 @@ static void enterWifiMaintenanceMode() {
   uint32_t suffix = (uint32_t)(ESP.getEfuseMac() & 0xFFFF);
   snprintf(wifiApSsid, sizeof(wifiApSsid), "ToyotaCYD-Files-%04X", suffix);
   snprintf(wifiApPassword, sizeof(wifiApPassword), "Toyota%04Xfiles", suffix);
+
+  WiFi.onEvent(wifiEventHandler);
   WiFi.mode(WIFI_AP);
-  if (!WiFi.softAP(wifiApSsid, wifiApPassword)) {
+  esp_err_t psResult = esp_wifi_set_ps(WIFI_PS_NONE);
+  Serial.printf("# WIFI AP CONFIG,channel=%u,max_clients=%u,power_save=OFF,ps_result=%d\n",
+                (unsigned)CYD_WIFI_CHANNEL, (unsigned)CYD_WIFI_MAX_CLIENTS, (int)psResult);
+
+  if (!WiFi.softAP(wifiApSsid, wifiApPassword, CYD_WIFI_CHANNEL, false, CYD_WIFI_MAX_CLIENTS)) {
     tft.fillScreen(TFT_RED);
     tft.setTextColor(TFT_WHITE, TFT_RED);
     tft.drawString("WIFI AP FAILED", 40, 110, 4);
     tft.drawString("RESTART REQUIRED", 40, 160, 3);
     return;
   }
+
   wifiServer.on("/", HTTP_GET, handleWifiRoot);
   wifiServer.on("/session", HTTP_GET, handleWifiSession);
   wifiServer.on("/download", HTTP_GET, handleWifiDownload);
   wifiServer.on("/zip-create", HTTP_POST, handleWifiZipCreate);
   wifiServer.on("/zip-download", HTTP_GET, handleWifiZipDownload);
   wifiServer.on("/zip-delete", HTTP_POST, handleWifiZipDelete);
+  wifiServer.on("/zip-cancel", HTTP_POST, handleWifiZipCancel);
   wifiServer.on("/clear", HTTP_GET, handleWifiClearRequest);
   wifiServer.on("/clear-confirm", HTTP_POST, handleWifiClearConfirm);
   wifiServer.on("/exit", HTTP_GET, handleWifiExit);
   wifiServer.onNotFound([](){ wifiServer.send(404, "text/plain", "Not found"); });
   wifiServer.begin();
 
+  Serial.printf("# WIFI AP READY,%s,http://%s,channel=%u\n",
+                wifiApSsid, WiFi.softAPIP().toString().c_str(), (unsigned)CYD_WIFI_CHANNEL);
   tft.fillScreen(TFT_BLACK);
   tft.setTextColor(TFT_WHITE, TFT_BLACK);
   tft.drawString("WIFI FILE MAINTENANCE", 20, 20, 4);
@@ -367,6 +442,8 @@ static void enterWifiMaintenanceMode() {
   tft.drawString(String("OPEN: http://") + WiFi.softAPIP().toString(), 20, 140, 2);
   tft.drawString(String("CAN DB: v") + TOYOTA_CAN_DB_VERSION, 20, 170, 2);
   tft.drawString("EXIT from browser restarts logger", 20, 200, 2);
+  lastWifiUiMs = 0;
+  serviceWifiMaintenanceUi();
 }
 
 void drawButtons() {
@@ -439,6 +516,20 @@ void setup() {
 void loop() {
   if (wifiMaintenanceMode) {
     wifiServer.handleClient();
+    serviceStoredSessionZipAsync();
+    serviceWifiMaintenanceUi();
+
+    if (!wifiZipCompletionLogged && storedSessionZipAsyncDone()) {
+      Serial.printf("# WIFI ZIP ASYNC READY,%s,%llu bytes\n",
+                    storedSessionZipAsyncSession().c_str(),
+                    (unsigned long long)storedSessionZipAsyncBytes());
+      wifiZipCompletionLogged = true;
+    } else if (!wifiZipCompletionLogged && storedSessionZipAsyncFailed()) {
+      Serial.printf("# WIFI ZIP ASYNC STOPPED,%s,%s\n",
+                    storedSessionZipAsyncSession().c_str(),
+                    storedSessionZipAsyncError().c_str());
+      wifiZipCompletionLogged = true;
+    }
     delay(1);
     return;
   }
@@ -446,6 +537,8 @@ void loop() {
   handleTouch();
   if (wifiMaintenanceMode) {
     wifiServer.handleClient();
+    serviceStoredSessionZipAsync();
+    serviceWifiMaintenanceUi();
     delay(1);
     return;
   }
