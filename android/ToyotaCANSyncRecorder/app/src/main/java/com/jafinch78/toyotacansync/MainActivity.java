@@ -103,7 +103,14 @@ public class MainActivity extends Activity implements BleSyncManager.Listener {
         service.setAction(CaptureService.ACTION_START);
         service.putExtra(CaptureService.EXTRA_RESULT_CODE, resultCode);
         service.putExtra(CaptureService.EXTRA_RESULT_DATA, data);
-        startForegroundService(service);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(service);
+        } else {
+            // Android 6.0/API 23 through Android 7.x do not have
+            // startForegroundService(). CaptureService immediately promotes
+            // itself with startForeground(), so startService() is correct here.
+            startService(service);
+        }
         capturing = true;
         markerButton.setEnabled(true);
         stopButton.setEnabled(true);

@@ -18,6 +18,8 @@ import android.os.SystemClock;
 import android.util.DisplayMetrics;
 import android.view.WindowManager;
 
+import androidx.core.app.NotificationCompat;
+
 import java.io.File;
 
 public class CaptureService extends Service {
@@ -64,11 +66,16 @@ public class CaptureService extends Service {
     }
 
     private void startAsForeground() {
-        Notification notification = new Notification.Builder(this, CHANNEL_ID)
+        // Notification.Builder(Context, channelId) is API 26+.
+        // NotificationCompat keeps the foreground notification valid on API 23
+        // while still using CHANNEL_ID on Android 8.0 and newer.
+        Notification notification = new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setSmallIcon(android.R.drawable.presence_video_online)
                 .setContentTitle("Toyota CAN synchronized capture")
                 .setContentText("Screen and microphone recording are active")
-                .setOngoing(true).build();
+                .setOngoing(true)
+                .setPriority(NotificationCompat.PRIORITY_LOW)
+                .build();
         if (Build.VERSION.SDK_INT >= 30) {
             startForeground(NOTIFICATION_ID, notification,
                     ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION |
@@ -149,7 +156,8 @@ public class CaptureService extends Service {
         NotificationChannel channel = new NotificationChannel(CHANNEL_ID,
                 "Synchronized capture", NotificationManager.IMPORTANCE_LOW);
         channel.setDescription("Toyota CAN synchronized screen and narration recording");
-        NotificationManager manager = getSystemService(NotificationManager.class);
+        NotificationManager manager = (NotificationManager)
+                getSystemService(Context.NOTIFICATION_SERVICE);
         manager.createNotificationChannel(channel);
     }
 

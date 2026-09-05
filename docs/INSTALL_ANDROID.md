@@ -12,7 +12,7 @@
 
    - `compileSdk 35`
    - `targetSdk 35`
-   - `minSdk 26` (required for Samsung S8+ / Android 8 compatibility)
+   - `minSdk 23` (required for the Android 6.0.1 / API 23 field device)
    - Gradle JDK 17
 
    API 35 and 37 can coexist. Do not change `minSdk` to 35 or 37.
@@ -38,7 +38,7 @@
    adb install -r app-debug.apk
    ```
 
-The source has `minSdk 26` for Android 8 and `targetSdk 35` for current Android.
+The source has `minSdk 23` for Android 6.0.1 and `targetSdk 35` for current Android.
 This release bundle contains source rather than a signed production APK, so the
 PC that builds it controls the signing key.
 
@@ -62,13 +62,13 @@ then enable **USB debugging** under the new **Developer options** menu.
    app to **Never sleeping apps** if Samsung pauses long captures.
 4. Accept Android's screen-recording confirmation every session.
 
-## Samsung S8+ / Android 8 and newer
+## Samsung S8+ / Android 6.0.1 (API 23) and newer
 
-1. Grant **Microphone** and **Location**. Android 8 requires Location permission
-   and Location services enabled to discover BLE devices even though the app
-   does not save location.
+1. Grant **Microphone** and **Location**. On Android 6.0.1/API 23, BLE scanning
+   requires runtime Location permission; Location services may also need to be
+   enabled even though the app does not save location.
 2. Disable battery optimization for Toyota CAN Sync.
-3. Android 8 records microphone narration but cannot capture another app's
+3. Android 6.0.1 records microphone narration but cannot capture another app's
    internal audio. OCR and voice narration are unaffected.
 4. For manual APK installation, permit **Install unknown apps** for the app used
    to open the APK, or install it through ADB.
