@@ -49,7 +49,7 @@ final class SyncStore {
         try {
             root.put("format", "ToyotaCANSync-AndroidCapture");
             root.put("format_version", "1.0");
-            root.put("app_version", "1.0.0");
+            root.put("app_version", appVersion(context));
             root.put("ble_protocol", "ToyotaCYD-Sync/1");
             root.put("android_model", Build.MANUFACTURER + " " + Build.MODEL);
             root.put("android_version", Build.VERSION.RELEASE);
@@ -205,6 +205,16 @@ final class SyncStore {
                 temporary.delete();
             }
         } catch (Exception ignored) {}
+    }
+
+    private static String appVersion(Context context) {
+        try {
+            String version = context.getPackageManager()
+                    .getPackageInfo(context.getPackageName(), 0).versionName;
+            return version == null ? "unknown" : version;
+        } catch (Exception ignored) {
+            return "unknown";
+        }
     }
 
     private static String utcNow() {
