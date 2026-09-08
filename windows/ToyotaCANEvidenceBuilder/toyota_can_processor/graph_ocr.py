@@ -68,6 +68,37 @@ def ordered_text(words: list[Word]) -> str:
     return " ".join(word.text for word in sorted(words, key=lambda word: (word.top // 12, word.left)))
 
 
+def _yellow_guide_crop(source: Image.Image) -> Image.Image | None:
+    """Return the region enclosed by strong yellow camera guide lines.
+
+    The test is deliberately strict so ordinary yellow app graphics do not
+    trigger a crop: two long horizontal and two long vertical guides must form
+    a useful interior rectangle.
+    """
+    width, height = source.size
+    if width < 160 or height < 160:
+        return None
+    preview = source.resize((160, 160), Image.Resampling.BILINEAR).convert("RGB")
+    pixels = preview.load()
+    yellow = lambda pixel: pixel[0] >= 155 and pixel[1] >= 125 and pixel[2] <= 105 \
+        and pixel[0] + pixel[1] >= pixel[2] * 3
+    rows = [y for y in range(160) if sum(yellow(pixels[x, y]) for x in range(160)) >= 72]
+    columns = [x for x in range(160) if sum(yellow(pixels[x, y]) for y in range(160)) >= 72]
+    row_runs = _clusters(rows, maximum_gap=2)
+    column_runs = _clusters(columns, maximum_gap=2)
+    if len(row_runs) < 2 or len(column_runs) < 2:
+        return None
+    top = row_runs[0][1] + 1
+    bottom = row_runs[-1][0]
+    left = column_runs[0][1] + 1
+    right = column_runs[-1][0]
+    if right - left < 48 or bottom - top < 48:
+        return None
+    box = (int(left * width / 160), int(top * height / 160),
+           int(right * width / 160), int(bottom * height / 160))
+    return source.crop(box)
+
+
 def prepare_ocr_image(image: Image.Image) -> tuple[Image.Image, str]:
     """Crop a recorded landscape app band from a portrait MP4 frame.
 
@@ -77,6 +108,9 @@ def prepare_ocr_image(image: Image.Image) -> tuple[Image.Image, str]:
     unchanged.
     """
     source = image.convert("RGB")
+    guided = _yellow_guide_crop(source)
+    if guided is not None:
+        return guided, "YELLOW_GUIDE_CROP"
     width, height = source.size
     preview_width = 96
     preview_height = max(96, int(round(height * preview_width / max(1, width))))
@@ -678,17 +712,27 @@ def _extract_dr_prius(image: Image.Image, words: list[Word], video_s: float,
     return row
 
 
-def _classify(text: str, requested: str) -> tuple[str, str]:
+def detect_app_layout(text: str, requested: str = "AUTO") -> tuple[str, str]:
     requested = requested.upper().replace(" ", "_")
     lowered = text.lower()
-    if "avg=" in lowered and "diff=" in lowered and ("camry" in lowered or "soc" in lowered):
+    hybrid_terms = sum(term in lowered for term in (
+        "hybrid assistant", "battery check", "avg=", "diff=", "start soc",
+        "actual soc", "est. capacity", "estimated capacity", "instant power"))
+    dr_prius_terms = sum(term in lowered for term in (
+        "dr. prius", "dr prius", "battery monitor", "battery block voltage",
+        "life expectancy test", "full battery test"))
+    if hybrid_terms >= 2 or ("avg=" in lowered and "diff=" in lowered):
         return "HYBRID_ASSISTANT", "HYBRID_ASSISTANT_BATTERY_CHECK"
-    if ("dr. prius" in lowered or "dr prius" in lowered
-            or ("battery monitor" in lowered and "battery block voltage" in lowered)
-            or requested.startswith("DR_PRIUS")):
+    if dr_prius_terms >= 1:
         return "DR_PRIUS", "DR_PRIUS_BATTERY_MONITOR"
+    if any(term in lowered for term in ("maxiap200", "autel", "live data", "diagnostic report")):
+        return "AUTEL_MAXIAP200", "AUTEL_LIVE_DATA_LIST"
     if requested.startswith("HYBRID_ASSISTANT"):
         return "HYBRID_ASSISTANT", "HYBRID_ASSISTANT_BATTERY_CHECK"
+    if requested.startswith("DR_PRIUS"):
+        return "DR_PRIUS", "DR_PRIUS_BATTERY_MONITOR"
+    if requested.startswith("AUTEL"):
+        return "AUTEL_MAXIAP200", "AUTEL_LIVE_DATA_LIST"
     return "UNKNOWN", "BATTERY_GRAPH_GENERIC"
 
 
@@ -701,7 +745,7 @@ def extract_battery_graph(image: Image.Image, words: list[Word], video_s: float,
                           direct_block_values: list[float | None] | None = None,
                           dr_graph_bounds: tuple[int, int, int, int] | None = None) -> dict[str, Any] | None:
     text = ordered_text(words)
-    app, layout = _classify(text, requested_profile)
+    app, layout = detect_app_layout(text, requested_profile)
     if app == "DR_PRIUS" or requested_profile.upper().replace(" ", "_").startswith("DR_PRIUS"):
         return _extract_dr_prius(image, words, video_s, vehicle_profile,
                                  expected_blocks, source_frame, crop_dir,

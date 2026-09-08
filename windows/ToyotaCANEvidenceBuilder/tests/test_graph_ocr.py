@@ -4,13 +4,31 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw
 
-from toyota_can_processor.graph_ocr import (Word, extract_battery_graph,
+from toyota_can_processor.graph_ocr import (Word, detect_app_layout, extract_battery_graph,
                                             parse_dr_prius_block_tsv,
                                             prepare_dr_prius_block_strip,
                                             prepare_ocr_image)
 
 
 class GraphOcrTests(unittest.TestCase):
+    def test_hybrid_assistant_evidence_overrides_dr_prius_request(self):
+        app, layout = detect_app_layout(
+            "Battery Check Start SOC 52% Actual SOC 54% Instant Power 1200 W",
+            "DR_PRIUS")
+        self.assertEqual(app, "HYBRID_ASSISTANT")
+        self.assertEqual(layout, "HYBRID_ASSISTANT_BATTERY_CHECK")
+
+    def test_yellow_camera_guides_crop_live_data_region(self):
+        image = Image.new("RGB", (800, 1200), "black")
+        draw = ImageDraw.Draw(image)
+        yellow = (255, 220, 0)
+        draw.rectangle((100, 250, 700, 950), outline=yellow, width=12)
+        draw.text((180, 400), "Engine speed 1200 rpm", fill="white")
+        prepared, mode = prepare_ocr_image(image)
+        self.assertEqual(mode, "YELLOW_GUIDE_CROP")
+        self.assertLess(prepared.width, image.width)
+        self.assertLess(prepared.height, image.height)
+
     def test_rotated_phone_band_is_cropped_without_timestamp_rule(self):
         image = Image.new("RGB", (1000, 2200), "black")
         draw = ImageDraw.Draw(image)
