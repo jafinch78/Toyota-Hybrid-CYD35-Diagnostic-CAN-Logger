@@ -27,6 +27,11 @@ GPIO32.
    `7E2 / 21CE` 17-block battery samples, grouped diagnostic actions, and
    Dr. Prius graph evidence, all graded `PROBABLE` until independently repeated
    or corroborated.
+5. **Video Narration Transcriber v1.0.5** — standalone Windows transcription
+   helper using the proven Evidence Builder narration path. Its frozen EXE was
+   validated end-to-end on Windows 10 1607 build 14393 with Python 3.12.7 x64,
+   faster-whisper 1.2.0, `small.en`, CPU/int8, and Evidence Builder-compatible
+   `VOICE_TRANSCRIPT.csv` output.
 
 ## Start here
 
@@ -39,6 +44,8 @@ GPIO32.
 - Evidence Builder source: `windows/ToyotaCANEvidenceBuilder`
 - Combined analysis release: `releases/Toyota_Hybrid_CAN_v0.5.3_Evidence_Builder_v1.0.2.zip`
 - Analysis release notes and validation: `docs/releases/v0.5.3-v1.0.2`
+- Video Narration Transcriber v1.0.5 notes/validation: `docs/releases/video-narration-transcriber-v1.0.5`
+- Video Narration Transcriber v1.0.5 SHA-256: `releases/VideoNarrationTranscriber_Win10_1607_Portable_v1.0.5.zip.sha256`
 
 Capture package 1.4, the 24-byte TCB1 raw record, and ToyotaCYD-Sync/1 remain
 unchanged. The Windows processor accepts firmware v2.4.x with this format.
@@ -60,3 +67,6 @@ remains passive-only.
 
 Evidence Builder reconstructs only traffic already present in a capture. It
 does not transmit diagnostic requests or CAN control/write commands.
+
+Video Narration Transcriber is transcription-only and does not transmit CAN,
+decode CAN, run OCR, or grade evidence.
