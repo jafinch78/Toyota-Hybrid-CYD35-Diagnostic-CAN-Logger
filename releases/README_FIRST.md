@@ -13,14 +13,12 @@ screen recordings.
   and automated dependency setup.
 - `ToyotaCAN_DB_Compat_Converter_v2_v140_x64.zip` — validated v140 x64
   compatibility converter retained as a standalone Windows helper.
-- `VideoNarrationTranscriber_Win10_1607_Portable_v1.0.1.zip` — standalone
-  narration transcriber for quickly generating timestamped transcripts from
-  `SCREEN.mp4`, `SCREEN_FAST.mp4`, and ordinary audio/video files while full
-  Evidence Builder / Analyzer processing runs separately. It uses the proven
-  `faster-whisper 1.2.0` / `small.en` / CPU `int8` path and restores the
-  Evidence Builder `vad_filter=True` transcription behavior. The ZIP includes
-  source, GUI/CLI, tests, install/verification scripts, and a synthetic spoken
-  WAV fixture for the Windows 10 1607 release checklist.
+- `VideoNarrationTranscriber_Win10_1607_Portable_v1.0.1.zip` — original
+  standalone narration-transcriber release retained for provenance.
+- Video Narration Transcriber **v1.0.5** is the current validated implementation.
+  Its exact portable-package SHA-256 and Windows 10 1607 EXE validation record
+  are under `docs/releases/video-narration-transcriber-v1.0.5/` and the matching
+  checksum record is in this `releases/` directory.
 
 ## Install and use
 
@@ -33,14 +31,31 @@ screen recordings.
 
 ### Video Narration Transcriber
 
-1. Extract `VideoNarrationTranscriber_Win10_1607_Portable_v1.0.1.zip`.
-2. Run `INSTALL.bat` and allow the `small.en` model load/download check.
-3. Run `RUN_TRANSCRIBER.bat` and select the video/audio files to transcribe.
-4. `CHATGPT_TRANSCRIPT.txt` is the quick handoff artifact; `VOICE_TRANSCRIPT.csv`
-   preserves media/video-clock timestamps for later Evidence Builder / Analyzer
-   correlation.
-5. On the Windows 10 1607 target, `RELEASE_CHECKLIST_WIN1607.bat` uses the
-   bundled `tests\fixtures\short_spoken_fixture.wav` when no argument is given.
+Video Narration Transcriber is a transcription-only helper for quickly turning
+`SCREEN.mp4`, `SCREEN_FAST.mp4`, and ordinary audio/video narration into files
+that can be provided to ChatGPT while the longer Evidence Builder / Analyzer
+pipeline continues.
+
+The validated v1.0.5 stack is:
+
+- Windows 10 x64 version 1607, build 14393
+- Python 3.12.7 x64
+- faster-whisper 1.2.0
+- CTranslate2 4.8.2
+- `small.en`
+- CPU / int8
+- `vad_filter=True`, matching the proven Evidence Builder narration path
+- NumPy 2.2.6 / PyInstaller 6.14.1 for the optional frozen EXE build
+
+`CHATGPT_TRANSCRIPT.txt` is the quick handoff artifact. `VOICE_TRANSCRIPT.csv`
+preserves the exact Evidence Builder-compatible schema and media/video-clock
+timestamps for later Evidence Builder / Analyzer correlation.
+
+On 2026-09-26 the exact v1.0.5 `dist\VideoNarrationTranscriber` EXE build passed
+`RELEASE_CHECKLIST_WIN1607.bat` on Windows 10 1607 build 14393: operating-system
+and fixture gate PASS, Python/model gate PASS, EXE transcription process return
+code 0, and read-back of a non-empty `VOICE_TRANSCRIPT.csv` with
+`evidence_builder_compatible=true` PASS.
 
 The processor is passive: it decodes frames already present in the capture and
 never sends CAN requests. Read-code observations are labelled
@@ -49,9 +64,7 @@ never sends CAN requests. Read-code observations are labelled
 transmit. The AHV40 `21CE` mapping and Dr. Prius graph rows are `PROBABLE`, not
 confirmed vehicle-wide definitions.
 
-The Video Narration Transcriber is transcription-only: it performs no CAN
-transmission, CAN decoding, OCR, or evidence grading. Native Windows 10 1607
-build-14393 validation remains an explicit release gate rather than being
-inferred from Linux/container tests.
+The Video Narration Transcriber performs no CAN transmission, CAN decoding,
+OCR, or evidence grading.
 
 `Toyota_Hybrid_CAN_Database_v0.5.2.xlsx` remains the rollback checkpoint.
