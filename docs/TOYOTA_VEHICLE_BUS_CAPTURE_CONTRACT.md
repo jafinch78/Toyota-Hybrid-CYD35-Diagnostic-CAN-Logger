@@ -19,6 +19,16 @@ The contract is bus-neutral from the beginning so CAN, BTH, AVC-LAN, and future 
 6. **Physical file rotation does not create another logical stream.** `RAW_000.TCB`, `RAW_001.TCB`, etc. are ordered chunks of one CAN stream.
 7. **Forward compatibility is mandatory.** Unknown record types and unknown stream types must be skippable when their lengths are valid.
 8. **Power-loss recovery is mandatory.** A missing clean-close record represents an unclean session; valid records preceding a truncated final record remain usable.
+9. **Evidence status must be explicit.** Toyota-documented behavior, project-verified wiring, third-party reverse engineering, and acquisition hypotheses must not be blended into one certainty level.
+
+### 2.1 Evidence-status terms
+
+This document uses these terms for BTH/AVC-LAN details:
+
+- `TOYOTA_DOCUMENTED`: supported directly by Toyota wiring/service/training material.
+- `PROJECT_VERIFIED`: established in this project's reviewed wiring/manual work or hardware record.
+- `REVERSE_ENGINEERED`: supported by reproducible public reverse-engineering work but not asserted as Toyota-published protocol documentation.
+- `CAPTURE_CANDIDATE`: useful initial acquisition/decoder setting that still requires target-vehicle validation.
 
 ## 3. Native session layout
 
@@ -54,9 +64,9 @@ Initial stream-type assignments:
 | Value | Type | Status |
 |---:|---|---|
 | 0 | SESSION | Reserved for session-level records |
-| 1 | CAN | Defined in v1 |
-| 2 | BTH | Reserved; raw framing to be defined with hardware validation |
-| 3 | AVC_LAN | Reserved; raw framing to be defined with hardware validation |
+| 1 | CAN | TCB1 defined in v1 |
+| 2 | BTH | Bus role/electrical path documented; raw capture framing to be frozen after target-hardware validation |
+| 3 | AVC_LAN | Bus timing/frame grammar substantially documented; raw capture framing to be frozen after logger-hardware validation |
 | 4-254 | FUTURE | Reserved |
 | 255 | VENDOR_EXPERIMENTAL | Noncanonical experiments only |
 
@@ -306,26 +316,196 @@ The first optimized revision retains:
 
 It removes or defers offline-reconstructible SD products and adopts RAW-first persistence.
 
-## 12. BTH and AVC-LAN expansion rules
+## 12. BTH acquisition and protocol knowledge
 
-BTH and AVC-LAN are reserved now but their raw byte/packet formats are intentionally not guessed before hardware validation.
+BTH is no longer treated as an unspecified future label. The electrical role and a substantial amount of higher-level behavior are already known, but target-specific serial framing still requires live validation before the raw-file format is frozen.
 
-When each format is defined it must:
+### 12.1 Platform applicability
 
-- receive its own independently versioned raw format identifier;
-- use the same common `time_us` clock semantics;
-- define RX/TX direction when meaningful;
+Current audited project position:
+
+| Platform | Battery-controller transport | Status |
+|---|---|---|
+| NHW20 Prius Gen 2 | Battery ECU -> public CAN -> HV Control ECU | `TOYOTA_DOCUMENTED` project audit; no later-style point-to-point BTH battery telemetry established |
+| AHV40 Camry Hybrid Gen 1 | Battery Smart Unit -> private serial/BTH -> HV Control ECU | `TOYOTA_DOCUMENTED` project audit |
+| ZVW30 Prius Gen 3 | Battery Smart Unit -> private serial/BTH -> Power Management Control ECU | `TOYOTA_DOCUMENTED` project audit |
+| ZVW35 Prius PHV Gen 1 | Battery Smart Unit -> private serial/BTH -> Power Management ECU, plus Plug-in Control communications | `TOYOTA_DOCUMENTED` project audit |
+| ZVW41 Prius v / Prius+ | Battery Smart Unit -> private serial/BTH -> Power Management ECU | `TOYOTA_DOCUMENTED` project audit |
+
+This supersedes older NHW20 private-link hypotheses in acquisition checklists. BTH capture hardware must not be generalized to NHW20 unless new vehicle evidence establishes such a link.
+
+### 12.2 Electrical/acquisition interface
+
+For the immediate BTH logger work:
+
+- the target is the low-voltage `BTH+` / `BTH-` differential pair between the Battery Smart Unit and hybrid/power-management controller;
+- the logger is receive-only;
+- use a protected high-impedance differential receiver;
+- current project hardware uses the TI `SN75HVD12DR` as the receive front end;
+- receiver-enable is asserted, transmitter-enable is held inactive, and the transmit input is held inactive;
+- do not add termination or bias to the in-vehicle link unless an isolated bench topology explicitly requires it;
+- preserve the vehicle's existing bus loading and wiring;
+- timestamp received data on the common session clock.
+
+For the current CYD hardware plan, the receiver output is routed to input-only GPIO35. The BTH logger must not use GPIO35 as a transmit or driver-enable output.
+
+For the ZVW35 PHV wiring already established in project research, `BTH+` and `BTH-` are the Battery Smart Unit to Power Management ECU private pair; project pinout work identified Battery Smart Unit C5-4/C5-5 to Power Management ECU L135-32/L135-33 respectively. These pin assignments remain platform-specific and must not be propagated to other Toyota profiles without their own wiring evidence.
+
+### 12.3 Known/reverse-engineered data-stream structure
+
+Public Gen 3 reverse engineering provides a concrete expectation for the Toyota BSU serial family:
+
+- 24 distinct packets;
+- 16 bytes per packet;
+- 384 bytes for the complete reported packet set;
+- reported content includes 14 blade/block voltages, 3 battery temperatures, intake temperature, pack current, battery-fan RPM, HV isolation voltage, 12-V voltage, BSU version information, and pack-fault flags.
+
+This is `REVERSE_ENGINEERED`, not yet a guarantee that every AHV40/ZVW30/ZVW35/ZVW41 packet layout is byte-identical. The native logger must therefore preserve raw observations rather than emit only interpreted fields.
+
+### 12.4 Baud/framing status
+
+The contract intentionally separates **acquisition configuration** from **protocol truth**.
+
+Existing research gives useful starting points around approximately 9600-baud Toyota BSU serial operation, while an older NHW20 experimental checklist used `19200 8O1` as an initial decoder probe. Neither value is promoted here as a universal BTH contract.
+
+When BTH hardware arrives, the first target-vehicle capture must determine and record:
+
+- polarity and idle state;
+- baud rate;
+- data-bit count;
+- parity;
+- stop-bit count;
+- packet spacing/repetition period;
+- packet sequence/identity;
+- checksums or integrity fields;
+- startup/shutdown behavior;
+- directionality/request-response behavior if any.
+
+`STREAM_REGISTER` for BTH must record the actual acquisition UART/framing configuration used. A later decoder may reinterpret the bytes, but it must not silently rewrite the original capture configuration.
+
+### 12.5 BTH raw-format design direction
+
+The eventual BTH raw format should preserve at minimum:
+
+- monotonic timestamp;
+- byte(s) received in original order;
+- acquisition framing configuration identity;
+- UART framing/parity/overrun error status where available;
+- RX/TX direction if transmission is ever enabled in a later Smart Unit development mode;
+- physical-file rotation identity and stream counters.
+
+The first vehicle logger remains receive-only. Active BTH emulation/transmission belongs to a later Smart Unit scope, not this capture firmware.
+
+## 13. AVC-LAN acquisition and protocol knowledge
+
+AVC-LAN is also sufficiently characterized to document its acquisition target now, even though its native raw file format will be frozen only when logger hardware is selected and bench/vehicle capture is validated.
+
+### 13.1 Toyota-documented network characteristics
+
+For Prius-era AVC-LAN:
+
+- Toyota identifies AVC-LAN as a Toyota-original audio/visual communication network;
+- nominal/maximum communication rate is approximately **17.8 kbit/s**;
+- physical medium is a **twisted-pair differential** connection;
+- payload length is variable from **0 to 32 bytes**;
+- Prius uses a **star topology** centered on the multimedia master; Toyota service information identifies the multi-display or audio head unit as the master depending on configuration.
+
+These are `TOYOTA_DOCUMENTED` characteristics.
+
+### 13.2 Project wiring points
+
+Relevant Gen 2 Prius wiring already documented in this project includes:
+
+- 2004 low-resolution/navigation MFD `86110-47071`: M14 pin 13 `TX+`, pin 14 `TX-` for AVC-LAN;
+- 2006-2009 MFD family: primary MFD/gateway branch `TX1+` / `TX1-` at M13 pins 4/5; the separate `TX2+` / `TX2-` branch appears at M13 pins 18/19 for the associated audio branch/configuration;
+- navigation/audio equipment uses additional paired AVC-LAN connections according to vehicle option wiring.
+
+Pin assignments are profile/option specific. The acquisition contract stores the selected physical tap in session metadata rather than assuming one universal connector.
+
+### 13.3 Reverse-engineered bit timing
+
+The widely reproduced AVC-LAN/IEBus implementation model is timing encoded and collision/arbitration aware:
+
+- bus logical `1` is released/floating differential state;
+- bus logical `0` is the driven/dominant differential state;
+- start pulse is approximately **165 us high**, followed by approximately 30 us released time;
+- logical `0` is approximately **32 us high + 7 us low/released**;
+- logical `1` is approximately **20 us high + 19 us low/released**;
+- ordinary bit period is therefore approximately **40 us**;
+- logical `0` is dominant, which supports arbitration.
+
+These values are `REVERSE_ENGINEERED` and should be treated as decoder timing windows, not exact crystal-clock constants.
+
+### 13.4 Reverse-engineered frame grammar
+
+The established public AVC-LAN frame model is:
+
+```text
+START
+MSG_NORMAL
+MASTER_ADDRESS[12]
+PARITY
+SLAVE_ADDRESS[12]
+PARITY
+ACK
+CONTROL[4]
+PARITY
+ACK
+PAYLOAD_LENGTH[8]
+PARITY
+ACK
+repeat PAYLOAD_LENGTH times:
+    DATA[8]
+    PARITY
+    ACK
+```
+
+Point-to-point acknowledgement is represented by the receiving node extending the sender's released ACK bit into the dominant state. Broadcast behavior differs because receivers do not acknowledge the same way.
+
+This grammar is `REVERSE_ENGINEERED` and is adequate to guide raw logger design and offline decoder tests.
+
+### 13.5 AVC-LAN raw-format design direction
+
+Because AVC-LAN encodes information in pulse widths and arbitration timing, the acquisition format should preserve timing evidence before relying on frame interpretation.
+
+The preferred raw capture hierarchy is:
+
+1. timestamped differential/logic edge durations or equivalent pulse-width events;
+2. offline reconstruction of start/0/1 symbols;
+3. offline frame/parity/ACK decoding;
+4. offline higher-level address/control/payload interpretation.
+
+The logger interface should be high impedance and must not add termination to the in-vehicle network. Receive-only capture is the default until a separate active-interface design is deliberately validated.
+
+A future AVC-LAN raw format should preserve at minimum:
+
+- common-clock timestamp;
+- edge/pulse duration or symbol timing sufficient to reproduce bit classification;
+- capture polarity/configuration identity;
+- decoder error/recovery markers where produced;
+- frame direction only when it can be established without inventing information;
+- physical-file rotation and stream counters.
+
+This keeps the embedded mission aligned with CAN/BTH: capture facts first, interpret offline.
+
+## 14. Cross-stream expansion rules
+
+BTH and AVC-LAN receive independently versioned raw formats, but neither may require a change to `SESSION.META` framing or to CAN TCB1.
+
+Each stream format must:
+
+- use the same common `time_us` session clock semantics;
+- define RX/TX direction when meaningful and observable;
 - support its own physical rotation without becoming multiple logical streams;
 - expose persisted/drop/error counters through `STREAM_COUNTERS`;
-- avoid changing the SESSION.META framing or CAN TCB1 format.
+- preserve raw evidence needed to rerun improved offline decoders;
+- support one-stream-at-a-time operation initially and concurrent acquisition later.
 
-This permits one-stream-at-a-time operation initially and concurrent stream acquisition later.
-
-## 13. Validation requirements
+## 15. Validation requirements
 
 Before optimized firmware removes legacy SD products, the offline expander must be validated against representative historical sessions.
 
-Required cases:
+Required CAN/legacy cases:
 
 1. clean close;
 2. unclean/power-loss close;
@@ -346,18 +526,49 @@ Acceptance requirements:
 - diagnostic/external transaction counts and timing are semantically equivalent to the historical path;
 - a single integrated Analyzer `process` smoke test is sufficient after Builder compatibility is established because Analyzer uses the integrated Builder path for raw CANLOG/CAPTURE processing.
 
-## 14. Non-goals for v1
+BTH validation adds:
+
+- target-vehicle receive-only electrical capture;
+- frozen baud/framing determination with error-rate evidence;
+- repeatable packet boundaries and sequence;
+- correlation against known battery voltage/current/temperature/fan reference values;
+- no transmission on the vehicle private link during logger validation.
+
+AVC-LAN validation adds:
+
+- bench/vehicle edge timing consistent with start/0/1 timing families;
+- reproducible parity/ACK/frame reconstruction;
+- address/control/payload decoding from raw timing without requiring firmware-side interpretation;
+- correlation to known MFD/audio/navigation actions where safe and appropriate.
+
+## 16. Non-goals for v1
 
 The v1 contract does not define:
 
-- BTH electrical/protocol framing;
-- AVC-LAN electrical/protocol framing;
+- a universal byte-identical BTH packet map across all Toyota platforms;
+- a final BTH raw-file binary layout before target-hardware capture validates UART/framing requirements;
+- a final AVC-LAN raw-file binary layout before acquisition hardware/timing capture is validated;
+- active BTH Smart Unit emulation;
+- active AVC-LAN control/injection;
 - a replacement for TCB1;
 - cloud storage or remote streaming;
 - live Wi-Fi transmission during acquisition;
 - automatic canonical-database mutation;
 - actuator/control commands.
 
-## 15. Compatibility statement
+## 17. Evidence references for BTH/AVC-LAN sections
+
+Primary project/source basis includes:
+
+- Toyota Gen 2 Prius electrical wiring diagrams documenting MFD AVC-LAN `TX+/TX-`, `TX1+/TX1-`, and `TX2+/TX2-` branches;
+- Toyota multiplex/network documentation identifying AVC-LAN as approximately 17.8 kbit/s, twisted-pair differential, 0-32-byte variable payload, and Prius star topology;
+- project Toyota hybrid DTC/INF audits establishing Battery Smart Unit private-serial/BTH architecture for AHV40, ZVW30, ZVW35, and ZVW41, while explicitly not establishing later-style BTH for NHW20;
+- project BTH acquisition checklists requiring a protected, high-impedance receive-only capture path and preservation of raw data before framing assumptions;
+- public LiBSU reverse engineering documenting the Gen 3 24 x 16-byte / 384-byte BSU data set and its reported battery telemetry contents;
+- public AVC-LAN/IEBus reverse engineering documenting pulse timing, dominant/released bit behavior, addressing, parity, acknowledgement, control, length, and payload grammar.
+
+All target-platform values discovered by future live acquisition must be added with explicit evidence status instead of silently changing a generic protocol assumption.
+
+## 18. Compatibility statement
 
 Existing historical CANLOG packages remain valid and unchanged. The native reduced-session contract is a new acquisition representation. The offline expander is the compatibility boundary that converts the reduced representation into the established legacy session products when those products are required.
