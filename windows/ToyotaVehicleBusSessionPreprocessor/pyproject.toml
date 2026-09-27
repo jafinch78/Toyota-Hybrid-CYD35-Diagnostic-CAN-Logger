@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "toyota-vehicle-bus-session-preprocessor"
+version = "0.1.0"
+description = "Offline expander for Toyota vehicle-bus native RAW + TVM1 sessions"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.scripts]
+toyota-session-preprocess = "toyota_vehicle_bus_session.cli:main"
+toyota-session-preprocess-gui = "toyota_vehicle_bus_session.gui:main"
+
+[tool.setuptools]
+packages = ["toyota_vehicle_bus_session"]
