@@ -1,25 +1,26 @@
 from __future__ import annotations
 
-import csv
 import hashlib
 import json
 from pathlib import Path
 import shutil
 import zipfile
 
+from .diagnostics import (
+    build_diagnostic_summary,
+    classify_external_diagnostic_frames,
+    reconstruct_logger_diagnostics,
+    write_external_diagnostics,
+    write_legacy_diagnostics,
+)
 from .legacy import build_legacy_checkpoint, build_legacy_manifest, write_legacy_events, write_legacy_sync
 from .model import ExpansionOptions, ExpansionResult
 from .native import load_native_session
-from .schemas import DIAGNOSTICS_HEADER, EXTERNAL_DIAGNOSTICS_HEADER
+from .tcb1 import iter_tcb_frames
 
 
 def _write_json(path: Path, value: object) -> None:
     path.write_text(json.dumps(value, sort_keys=True, indent=2, separators=(",", ": ")) + "\n", encoding="utf-8")
-
-
-def _write_header(path: Path, header: list[str]) -> None:
-    with path.open("w", newline="", encoding="utf-8") as f:
-        csv.writer(f, lineterminator="\n").writerow(header)
 
 
 def _copy_raw_verified(src: Path, dst: Path, preserve_mtime: bool) -> None:
@@ -57,8 +58,15 @@ def expand_native_session(source: Path, output_parent: Path, *, options: Expansi
         _write_json(legacy_dir / "CHECKPOINT.JSON", build_legacy_checkpoint(session))
         write_legacy_sync(session, legacy_dir / "SYNC.CSV")
         write_legacy_events(session, legacy_dir / "EVENTS.CSV")
-        _write_header(legacy_dir / "DIAGNOSTICS.CSV", DIAGNOSTICS_HEADER)
-        _write_header(legacy_dir / "EXTERNAL_DIAGNOSTICS.CSV", EXTERNAL_DIAGNOSTICS_HEADER)
+
+        logger_transactions = reconstruct_logger_diagnostics(iter_tcb_frames(session.can_paths), session.meta)
+        external_frames = classify_external_diagnostic_frames(iter_tcb_frames(session.can_paths))
+        write_legacy_diagnostics(logger_transactions, legacy_dir / "DIAGNOSTICS.CSV")
+        write_external_diagnostics(external_frames, legacy_dir / "EXTERNAL_DIAGNOSTICS.CSV")
+        diagnostic_summary = build_diagnostic_summary(
+            iter_tcb_frames(session.can_paths), logger_transactions, external_frames, session.meta
+        )
+
         (legacy_dir / "README.TXT").write_text(
             "Offline-expanded Toyota vehicle-bus session. RAW TCB bytes are authoritative and were copied byte-for-byte. Generated compatibility text products carry TVM1 provenance.\n",
             encoding="utf-8",
@@ -74,12 +82,13 @@ def expand_native_session(source: Path, output_parent: Path, *, options: Expansi
                 "CHECKPOINT.JSON": "GENERATED_COMPATIBILITY",
                 "SYNC.CSV": "GENERATED_COMPATIBILITY",
                 "EVENTS.CSV": "GENERATED_COMPATIBILITY",
-                "DIAGNOSTICS.CSV": "HEADER_ONLY_PENDING_TASK5",
-                "EXTERNAL_DIAGNOSTICS.CSV": "HEADER_ONLY_PENDING_TASK5",
+                "DIAGNOSTICS.CSV": "GENERATED_RECONSTRUCTED_FROM_RAW_META",
+                "EXTERNAL_DIAGNOSTICS.CSV": "GENERATED_RECONSTRUCTED_FROM_RAW",
                 "DECODED.CSV": "NOT_GENERATED_DERIVED",
                 "SIGNALS.CSV": "NOT_GENERATED_DERIVED",
                 "PLOT.CSV": "NOT_GENERATED_DERIVED",
             },
+            "diagnostic_reconstruction": diagnostic_summary,
             "raw_files": [
                 {"name": path.name, "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
                 for path in session.can_paths
