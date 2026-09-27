@@ -62,12 +62,24 @@ class Tcb1Tests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "version"):
                 list(iter_tcb_frames([bad_ver]))
 
+    def test_intra_chunk_tx_rx_timestamp_inversion_is_allowed(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = pathlib.Path(td)/"RAW_000.TCB"
+            self._write(path, [
+                rec(1000, 0x7E2, direction=1),
+                rec(997, 0x2C9, direction=0),
+                rec(1010, 0x100, direction=0),
+            ])
+            report = scan_tcb_stream([path])
+        self.assertEqual(report.record_count, 3)
+        self.assertEqual((report.rx_count, report.tx_count), (2, 1))
+
     def test_timestamp_reversal_across_chunks_is_rejected(self):
         with tempfile.TemporaryDirectory() as td:
             root = pathlib.Path(td)
             a=root/"RAW_000.TCB"; b=root/"RAW_001.TCB"
             self._write(a,[rec(200,0x100)]); self._write(b,[rec(100,0x101)])
-            with self.assertRaisesRegex(ValueError, "timestamp reversal"):
+            with self.assertRaisesRegex(ValueError, "chunk boundary"):
                 scan_tcb_stream([a,b])
 
 
