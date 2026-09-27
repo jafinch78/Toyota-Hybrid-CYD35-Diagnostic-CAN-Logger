@@ -5,6 +5,7 @@ import pathlib
 import struct
 import tempfile
 import unittest
+import zipfile
 
 from toyota_vehicle_bus_session.packaging import expand_native_session
 from toyota_vehicle_bus_session.validation_fixture import synthesize_native_fixture
@@ -73,6 +74,32 @@ class ValidationFixtureTests(unittest.TestCase):
             warning["code"] == "VALIDATION_FIXTURE_LOSSY_EVENT_DETAIL"
             for warning in synthesis_report["warnings"]
         ))
+
+    def test_zip_input_with_nested_canlog_session_is_supported(self):
+        with tempfile.TemporaryDirectory() as td:
+            base = pathlib.Path(td)
+            legacy = self.make_legacy(base / "legacy" / "CANLOG")
+            archive = base / "CANLOG_fixture.zip"
+            with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as bundle:
+                for path in sorted((base / "legacy").rglob("*")):
+                    if path.is_file():
+                        bundle.write(path, path.relative_to(base / "legacy").as_posix())
+
+            native = synthesize_native_fixture(archive, base / "native")
+            report = json.loads(native.report_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(native.session_id, "S0166")
+        self.assertEqual(report["source_kind"], "ZIP")
+        self.assertEqual(report["source_archive"], str(archive.resolve()))
+
+    def test_zip_path_traversal_is_rejected(self):
+        with tempfile.TemporaryDirectory() as td:
+            base = pathlib.Path(td)
+            archive = base / "bad.zip"
+            with zipfile.ZipFile(archive, "w") as bundle:
+                bundle.writestr("../escape/MANIFEST.JSON", "{}")
+            with self.assertRaisesRegex(ValueError, "path traversal"):
+                synthesize_native_fixture(archive, base / "native")
 
     def test_stale_manifest_or_session_open_cannot_upgrade_unclean_session(self):
         with tempfile.TemporaryDirectory() as td:
