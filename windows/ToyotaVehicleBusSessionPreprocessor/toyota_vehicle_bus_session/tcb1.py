@@ -101,6 +101,7 @@ def scan_tcb_stream(paths: Sequence[Path]) -> CanStreamReport:
     total = rx_count = tx_count = 0
     stream_first: int | None = None
     stream_last: int | None = None
+    previous_chunk_last: int | None = None
 
     for path in path_list:
         file_hash = hashlib.sha256()
@@ -121,8 +122,6 @@ def scan_tcb_stream(paths: Sequence[Path]) -> CanStreamReport:
                     tail = len(raw)
                     break
                 frame = _decode_record(raw, path)
-                if stream_last is not None and frame.time_us < stream_last:
-                    raise ValueError(f"TCB1 timestamp reversal across stream at {path}")
                 logical.update(raw)
                 chunk_records += 1
                 total += 1
@@ -136,6 +135,10 @@ def scan_tcb_stream(paths: Sequence[Path]) -> CanStreamReport:
                 if stream_first is None:
                     stream_first = frame.time_us
                 stream_last = frame.time_us
+        if previous_chunk_last is not None and chunk_first is not None and chunk_first < previous_chunk_last:
+            raise ValueError(f"TCB1 timestamp reversal across chunk boundary at {path}")
+        if chunk_last is not None:
+            previous_chunk_last = chunk_last
         chunks.append(
             TcbChunkReport(path, chunk_records, tail, chunk_first, chunk_last, file_hash.hexdigest())
         )
