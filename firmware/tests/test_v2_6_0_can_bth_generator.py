@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-GENERATOR = ROOT / "tools" / "build_can_bth_v2_6_0_firmware_r2.py"
+GENERATOR = ROOT / "tools" / "build_can_bth_v2_6_0_firmware_r3.py"
 RC2_DIR = ROOT / ".ci_rc2" / "firmware" / "Toyota_Hybrid_CYD35_Diagnostic_CAN_Logger_v2_5_0"
 
 
@@ -14,7 +14,7 @@ class CanBthV260GeneratorTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         if not GENERATOR.exists():
-            raise AssertionError("CAN+BTH v2.6 R2 generator does not exist yet")
+            raise AssertionError("CAN+BTH v2.6 R3 generator does not exist yet")
         spec = importlib.util.spec_from_file_location("canbthgen", GENERATOR)
         module = importlib.util.module_from_spec(spec)
         assert spec.loader is not None
@@ -41,6 +41,17 @@ class CanBthV260GeneratorTests(unittest.TestCase):
         self.assertIn("CAN_BITRATE = 500000", self.source)
         self.assertIn("CAN_QUEUE_LENGTH = 768", self.source)
         self.assertIn("CAN_BATCH_LENGTH = 128", self.source)
+
+    def test_three_board_profiles_are_distinct(self):
+        self.assertIn("CYD_BOARD_PROFILE_DORHEA 1", self.source)
+        self.assertIn("CYD_BOARD_PROFILE_E32R35T 2", self.source)
+        self.assertIn("CYD_BOARD_PROFILE_E32N35T 3", self.source)
+        self.assertIn('CYD_BOARD_PROFILE[] = "DORHEA_B0DLNJSSFW_TOUCH"', self.source)
+        self.assertIn('CYD_BOARD_PROFILE[] = "E32R35T_TOUCH"', self.source)
+        self.assertIn('CYD_BOARD_PROFILE[] = "E32N35T_TOUCH"', self.source)
+        self.assertIn("uint16_t touchCalibration[5] = {295, 3524, 310, 3487, 3};", self.source)
+        self.assertIn("uint16_t touchCalibration[5] = {295, 3524, 310, 3487, 7};", self.source)
+        self.assertIn("CYD_TOUCH_AUTO_CALIBRATE = true", self.source)
 
     def test_bth_defaults_off_without_allocating_runtime_resources(self):
         self.assertIn("#define ENABLE_BTH_CAPTURE 0", self.source)
