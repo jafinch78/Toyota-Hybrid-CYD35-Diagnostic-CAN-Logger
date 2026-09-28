@@ -11,6 +11,7 @@ import tempfile
 import zipfile
 
 from .meta import MetaHeader, MetaRecord, write_meta
+from .schemas import profile_enum
 from .tcb1 import scan_tcb_stream
 
 EVENT_CODES = {
@@ -50,6 +51,14 @@ def _lp(value: object) -> bytes:
     if len(raw) > 255:
         raise ValueError("validation fixture string exceeds TVM1 v1 maximum")
     return struct.pack("<H", len(raw)) + raw
+
+
+def _event_payload(event_code: int, severity: int,
+                   args: tuple[tuple[int, int], ...] = ()) -> bytes:
+    payload = struct.pack("<HBB", event_code, severity, len(args))
+    for arg_id, value in args:
+        payload += struct.pack("<HHq", arg_id, 0, int(value))
+    return payload
 
 
 def _find_legacy_root(path: Path) -> Path:
@@ -157,6 +166,16 @@ def synthesize_native_fixture(legacy_canlog: Path, output_dir: Path) -> NativeFi
         )
         add(0x0003, 1, create_us)
 
+        profile_value = profile_enum(manifest.get("vehicle_profile"))
+        if profile_value is not None:
+            confidence = max(0, min(100, int(manifest.get("profile_confidence_pct", 0) or 0)))
+            add(
+                0x0030,
+                0,
+                create_us,
+                _event_payload(17, 0, ((5, profile_value), (6, confidence))),
+            )
+
         for index, chunk in enumerate(raw_report.chunks):
             add(0x0005, 1, chunk.first_time_us or create_us, struct.pack("<H", index) + _lp(chunk.path.name))
             add(
@@ -193,7 +212,7 @@ def synthesize_native_fixture(legacy_canlog: Path, output_dir: Path) -> NativeFi
                     event_code = EVENT_CODES.get(event_name, 65535)
                     severity = SEVERITIES.get(row.get("Severity", "INFO").upper(), 0)
                     time_us = int(row.get("Time_us") or 0)
-                    add(0x0030, 0, time_us, struct.pack("<HBB", event_code, severity, 0))
+                    add(0x0030, 0, time_us, _event_payload(event_code, severity))
                     if details or event_code == 65535:
                         warnings.append({
                             "code": "VALIDATION_FIXTURE_LOSSY_EVENT_DETAIL",
