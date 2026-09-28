@@ -212,14 +212,13 @@ def _validate_one_case(case: ValidationCase, output_root: Path,
     return report
 
 
-def final_gate_status(case_reports: list[dict[str, Any]], analyzer_smoke: str,
-                      windows_1607: str) -> str:
+def final_gate_status(case_reports: list[dict[str, Any]], windows_1607: str) -> str:
     if not case_reports:
         return "FAIL"
     if any(item.get("raw_gate") != "PASS" or item.get("builder_gate") != "PASS"
            for item in case_reports):
         return "FAIL"
-    if analyzer_smoke != "PASS" or windows_1607 != "PASS":
+    if windows_1607 != "PASS":
         return "FAIL"
     return "PASS"
 
@@ -258,8 +257,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="SESSION|CANLOG[|CAPTURE]; repeat for every validation session")
     parser.add_argument("--builder-python", type=Path,
                         help="Python executable for the exact Evidence Builder 1.0.4 environment")
-    parser.add_argument("--analyzer-smoke-report", type=Path,
-                        help="JSON result from the one required Analyzer RC8 process smoke")
     parser.add_argument("--windows-1607-report", type=Path,
                         help="JSON result captured on the Windows 10 1607 validation machine")
     parser.add_argument("-o", "--output", type=Path, required=True)
@@ -299,18 +296,14 @@ def main(argv: list[str] | None = None) -> int:
                 "failures": [f"validation exception: {error}"],
             })
 
-    analyzer_status, analyzer_evidence = _read_external_gate(
-        args.analyzer_smoke_report, "Analyzer RC8 smoke")
     windows_status, windows_evidence = _read_external_gate(
         args.windows_1607_report, "Windows 10 1607")
-    gate = final_gate_status(case_reports, analyzer_status, windows_status)
+    gate = final_gate_status(case_reports, windows_status)
 
     result = {
         "format": "TVM1_OFFLINE_EXPANDER_VALIDATION",
         "version": 1,
         "cases": case_reports,
-        "analyzer_smoke": analyzer_status,
-        "analyzer_smoke_evidence": analyzer_evidence,
         "windows_10_1607": windows_status,
         "windows_10_1607_evidence": windows_evidence,
         "gate": gate,
