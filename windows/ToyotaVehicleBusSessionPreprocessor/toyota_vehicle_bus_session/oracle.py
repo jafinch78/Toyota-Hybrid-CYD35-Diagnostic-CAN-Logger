@@ -68,6 +68,51 @@ def _material_new_warnings(original: list[str], expanded: list[str]) -> list[str
     return [item for item in new if any(term in item.lower() for term in _MATERIAL_WARNING_TERMS)]
 
 
+def _normalized_status_counts(value: object) -> dict[str, int]:
+    if not isinstance(value, dict):
+        return {}
+    result: dict[str, int] = {}
+    for key, raw in value.items():
+        count = int(raw or 0)
+        if count:
+            result[str(key)] = count
+    return result
+
+
+def _raw_response_recovery_improvement(
+    original_external: dict[str, Any],
+    expanded_external: dict[str, Any],
+    *,
+    raw_record_count_equal: bool,
+    raw_stream_identical: bool,
+    inventory_identical: bool,
+) -> bool:
+    """Recognize the narrow historical requests-only evidence-loss pattern.
+
+    Some historical logger packages persisted external diagnostic requests but omitted
+    the response rows even though those responses remained in authoritative RAW TCB.
+    The offline expander is allowed to recover those responses only when the underlying
+    Builder raw stream and CAN-ID/direction inventory are identical.
+    """
+    if not (raw_record_count_equal and raw_stream_identical and inventory_identical):
+        return False
+    original_transactions = int(original_external.get("transactions", 0) or 0)
+    expanded_transactions = int(expanded_external.get("transactions", 0) or 0)
+    if original_transactions <= 0 or expanded_transactions < original_transactions:
+        return False
+    original_status = _normalized_status_counts(original_external.get("status_counts"))
+    expanded_status = _normalized_status_counts(expanded_external.get("status_counts"))
+    if original_status != {"NO_RESPONSE": original_transactions}:
+        return False
+    if expanded_status.get("OK", 0) <= 0:
+        return False
+    if expanded_status.get("NO_RESPONSE", 0) >= original_transactions:
+        return False
+    if sum(expanded_status.values()) != expanded_transactions:
+        return False
+    return True
+
+
 def _summary_by_session(root: Path) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
     processing = _load_json(root / "PROCESSING_SUMMARY.json")
     sessions: dict[str, dict[str, Any]] = {}
@@ -131,20 +176,25 @@ def compare_builder_outputs(original_builder_output: Path,
         expanded_raw = expanded.get("raw", {}) or {}
         original_count = int(original_raw.get("raw_record_count", 0) or 0)
         expanded_count = int(expanded_raw.get("raw_record_count", 0) or 0)
-        if original_count != expanded_count:
+        raw_record_count_equal = original_count == expanded_count
+        if not raw_record_count_equal:
             local_failures.append(
                 f"{name}: raw record count mismatch: original={original_count}, expanded={expanded_count}")
 
         original_raw_csv = original_root / name / "CAN_RAW.csv"
         expanded_raw_csv = expanded_root / name / "CAN_RAW.csv"
+        raw_stream_identical = False
         if not original_raw_csv.exists() or not expanded_raw_csv.exists():
             local_failures.append(f"{name}: CAN_RAW.csv missing; oracle requires Builder --raw-csv for logical CAN stream verification")
-        elif _sha256(original_raw_csv) != _sha256(expanded_raw_csv):
-            local_failures.append(f"{name}: ordered logical CAN stream differs (CAN_RAW.csv SHA-256 mismatch)")
+        else:
+            raw_stream_identical = _sha256(original_raw_csv) == _sha256(expanded_raw_csv)
+            if not raw_stream_identical:
+                local_failures.append(f"{name}: ordered logical CAN stream differs (CAN_RAW.csv SHA-256 mismatch)")
 
         original_inventory = _inventory_signature(original_root / name / "CAN_ID_INVENTORY.csv")
         expanded_inventory = _inventory_signature(expanded_root / name / "CAN_ID_INVENTORY.csv")
-        if original_inventory != expanded_inventory:
+        inventory_identical = original_inventory == expanded_inventory
+        if not inventory_identical:
             local_failures.append(f"{name}: CAN-ID/direction inventory counts differ")
 
         if original.get("alignment") != expanded.get("alignment"):
@@ -154,10 +204,34 @@ def compare_builder_outputs(original_builder_output: Path,
 
         original_external = original.get("external_diagnostics", {}) or {}
         expanded_external = expanded.get("external_diagnostics", {}) or {}
-        if int(original_external.get("transactions", 0) or 0) != int(expanded_external.get("transactions", 0) or 0):
-            local_failures.append(f"{name}: external diagnostic transaction count differs")
-        if (original_external.get("status_counts") or {}) != (expanded_external.get("status_counts") or {}):
-            local_failures.append(f"{name}: external diagnostic status-count distribution differs")
+        original_external_transactions = int(original_external.get("transactions", 0) or 0)
+        expanded_external_transactions = int(expanded_external.get("transactions", 0) or 0)
+        original_external_status = _normalized_status_counts(original_external.get("status_counts"))
+        expanded_external_status = _normalized_status_counts(expanded_external.get("status_counts"))
+        external_mismatch = (
+            original_external_transactions != expanded_external_transactions
+            or original_external_status != expanded_external_status
+        )
+        external_comparison = "EXACT"
+        if external_mismatch:
+            if _raw_response_recovery_improvement(
+                original_external,
+                expanded_external,
+                raw_record_count_equal=raw_record_count_equal,
+                raw_stream_identical=raw_stream_identical,
+                inventory_identical=inventory_identical,
+            ):
+                external_comparison = "RAW_RESPONSE_RECOVERY_IMPROVEMENT"
+                warnings.append(
+                    f"{name}: RAW_RESPONSE_RECOVERY_IMPROVEMENT: authoritative identical RAW recovered "
+                    f"external responses omitted by the historical requests-only evidence product "
+                    f"({original_external_transactions} -> {expanded_external_transactions} transactions; "
+                    f"statuses {original_external_status} -> {expanded_external_status})")
+            else:
+                if original_external_transactions != expanded_external_transactions:
+                    local_failures.append(f"{name}: external diagnostic transaction count differs")
+                if original_external_status != expanded_external_status:
+                    local_failures.append(f"{name}: external diagnostic status-count distribution differs")
         for key in ("battery_block_rows", "diagnostic_action_rows", "decoded_field_rows",
                     "resistance_rows", "identity_rows"):
             if int(original_external.get(key, 0) or 0) != int(expanded_external.get(key, 0) or 0):
@@ -196,6 +270,7 @@ def compare_builder_outputs(original_builder_output: Path,
             "raw_record_count_expanded": expanded_count,
             "decoded_rows_original": original_decoded_rows,
             "decoded_rows_expanded": expanded_decoded_rows,
+            "external_diagnostic_comparison": external_comparison,
         })
         failures.extend(local_failures)
 
