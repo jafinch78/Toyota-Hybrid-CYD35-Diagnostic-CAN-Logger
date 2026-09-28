@@ -1,0 +1,57 @@
+{
+  "expanded_canlog_sha256": "a2368990e8983484778e5019ac05e7e7f357bf342d5ec18bfffa69a6f0a21919",
+  "expanded_raw": {
+    "chunks": {
+      "RAW_000.TCB": "824359f8d18b80d863637f7e3f41e8c26d56f1c57f9c06f23aff626efaf148ab"
+    },
+    "logical_record_sha256": "a9d96bfc8ec9f3ad575dac0f6c82798f9fd73793c457fa6c276b983dfd345089",
+    "record_count": 1021568,
+    "rx_count": 1021568,
+    "truncated_tail_bytes": {
+      "RAW_000.TCB": 0
+    },
+    "tx_count": 0
+  },
+  "expansion_report": "C:\\Users\\USB3.0\\Downloads\\native-session-preprocessor-tested-win1607\\validation\\win1607_runtime\\runtime_work\\expanded\\CANLOG_TVM1_S0141\\EXPANSION_REPORT.json",
+  "failures": [],
+  "final_errorlevel": 0,
+  "format": "TVM1_WINDOWS_1607_RUNTIME_VALIDATION",
+  "native_raw": {
+    "chunks": {
+      "RAW_000.TCB": "824359f8d18b80d863637f7e3f41e8c26d56f1c57f9c06f23aff626efaf148ab"
+    },
+    "logical_record_sha256": "a9d96bfc8ec9f3ad575dac0f6c82798f9fd73793c457fa6c276b983dfd345089",
+    "record_count": 1021568,
+    "rx_count": 1021568,
+    "truncated_tail_bytes": {
+      "RAW_000.TCB": 0
+    },
+    "tx_count": 0
+  },
+  "native_session_meta_sha256": "e6831d85bade4baa466fb57b18605ae8b6cab4884f0329faea22352d884eaf17",
+  "os_name": "nt",
+  "platform": "Windows-10-10.0.14393-SP0",
+  "platform_ok": true,
+  "python_executable": "C:\\Users\\USB3.0\\Downloads\\native-session-preprocessor-tested-win1607\\.venv\\Scripts\\python.exe",
+  "python_version": "3.12.7 (tags/v3.12.7:0b05ead, Oct  1 2024, 03:06:41) [MSC v.1941 64 bit (AMD64)]",
+  "required_windows_build": 14393,
+  "session_id": "S0141",
+  "source_canlog": "C:\\Users\\USB3.0\\Downloads\\native-session-preprocessor-tested-win1607\\CANLOG_091826_182353.zip",
+  "source_canlog_sha256": "0034c9e165a8daff2a53473fc20177a19ba8c3d9b68dd691b73cb178dad24edd",
+  "source_raw": {
+    "chunks": {
+      "RAW_000.TCB": "824359f8d18b80d863637f7e3f41e8c26d56f1c57f9c06f23aff626efaf148ab"
+    },
+    "logical_record_sha256": "a9d96bfc8ec9f3ad575dac0f6c82798f9fd73793c457fa6c276b983dfd345089",
+    "record_count": 1021568,
+    "rx_count": 1021568,
+    "truncated_tail_bytes": {
+      "RAW_000.TCB": 0
+    },
+    "tx_count": 0
+  },
+  "status": "PASS",
+  "synthesis_report": "C:\\Users\\USB3.0\\Downloads\\native-session-preprocessor-tested-win1607\\validation\\win1607_runtime\\runtime_work\\native\\S0141\\SYNTHESIS_REPORT.json",
+  "version": 1,
+  "windows_build": 14393
+}
