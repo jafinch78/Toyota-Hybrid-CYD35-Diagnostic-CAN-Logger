@@ -36,3 +36,14 @@ jobs:
             windows/ToyotaVehicleBusSessionPreprocessor/dist/*.whl
             windows/ToyotaVehicleBusSessionPreprocessor/scripts/validate_real_sessions.py
           if-no-files-found: error
+      - name: Checkout exact Evidence Builder 1.0.4 oracle
+        uses: actions/checkout@v4
+        with:
+          ref: evidence-builder-v1.0.4
+          path: _builder_oracle
+      - name: Upload Evidence Builder 1.0.4 oracle source
+        uses: actions/upload-artifact@v4
+        with:
+          name: evidence-builder-v1.0.4-source
+          path: _builder_oracle/windows/ToyotaCANEvidenceBuilder/**
+          if-no-files-found: error
