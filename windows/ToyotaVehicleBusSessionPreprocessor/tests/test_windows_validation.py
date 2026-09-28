@@ -8,7 +8,9 @@ import tempfile
 import unittest
 import zipfile
 
-SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "validate_windows_1607.py"
+ROOT = Path(__file__).resolve().parents[1]
+SCRIPT = ROOT / "scripts" / "validate_windows_1607.py"
+LAUNCHER = ROOT / "RUN_WINDOWS_1607_VALIDATION.bat"
 
 
 def load_validator():
@@ -100,6 +102,19 @@ class Windows1607ValidationTests(unittest.TestCase):
         self.assertEqual(validator.final_status(True, []), "PASS")
         self.assertEqual(validator.final_status(False, []), "FAIL")
         self.assertEqual(validator.final_status(True, ["mismatch"]), "FAIL")
+
+    def test_windows_launcher_is_offline_observable_and_preserves_errorlevel(self) -> None:
+        text = LAUNCHER.read_text(encoding="utf-8").lower()
+        self.assertIn('cd /d "%~dp0"', text)
+        self.assertIn('.venv\\scripts\\python.exe', text)
+        self.assertIn('--no-index', text)
+        self.assertIn('--no-deps', text)
+        self.assertIn('validate_windows_1607.py', text)
+        self.assertIn('windows_1607_validation.json', text)
+        self.assertIn('set "final_rc=%errorlevel%"', text)
+        self.assertLess(text.index('set "final_rc=%errorlevel%"'), text.index('pause'))
+        self.assertNotIn('analyzer', text)
+        self.assertNotIn('builder', text)
 
 
 if __name__ == "__main__":
