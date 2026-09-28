@@ -100,18 +100,20 @@ def _raw_response_recovery_improvement(
     raw_stream_identical: bool,
     inventory_identical: bool,
 ) -> bool:
-    """Recognize monotonic recovery of responses omitted from historical sidecars.
+    """Recognize fail-closed recovery of responses omitted from historical sidecars.
 
-    This is deliberately fail-closed. Recovery is accepted only when the Builder sees
-    identical authoritative RAW and CAN inventory, the reconstructed transaction set is
-    not smaller, successful responses increase, no-response outcomes decrease, status
-    totals reconcile, and every derived external-evidence class is non-decreasing.
+    Recovery is accepted only when authoritative RAW and CAN inventory are identical,
+    the number of tester-request-backed transactions is unchanged, explicit negative
+    response semantics are preserved, successful responses increase, no-response
+    outcomes decrease, and every derived external-evidence class is non-decreasing.
+    Additional unmatched responses are permitted only when they come from the identical
+    authoritative RAW stream; they may never mask request inflation.
     """
     if not (raw_record_count_equal and raw_stream_identical and inventory_identical):
         return False
     original_transactions = int(original_external.get("transactions", 0) or 0)
     expanded_transactions = int(expanded_external.get("transactions", 0) or 0)
-    if original_transactions <= 0 or expanded_transactions < original_transactions:
+    if original_transactions <= 0 or expanded_transactions <= 0:
         return False
 
     original_status = _normalized_status_counts(original_external.get("status_counts"))
@@ -120,11 +122,33 @@ def _raw_response_recovery_improvement(
         return False
     if sum(expanded_status.values()) != expanded_transactions:
         return False
-    if original_status.get("NO_RESPONSE", 0) <= 0:
+
+    original_unmatched = original_status.get("UNMATCHED_RESPONSE", 0)
+    expanded_unmatched = expanded_status.get("UNMATCHED_RESPONSE", 0)
+    original_request_backed = original_transactions - original_unmatched
+    expanded_request_backed = expanded_transactions - expanded_unmatched
+    if original_request_backed <= 0 or expanded_request_backed != original_request_backed:
+        return False
+    if expanded_unmatched < original_unmatched:
+        return False
+
+    original_negative = {
+        key: value for key, value in original_status.items()
+        if key.startswith("NEGATIVE_RESPONSE")
+    }
+    expanded_negative = {
+        key: value for key, value in expanded_status.items()
+        if key.startswith("NEGATIVE_RESPONSE")
+    }
+    if original_negative != expanded_negative:
+        return False
+
+    original_no_response = original_status.get("NO_RESPONSE", 0)
+    if original_no_response <= 0:
         return False
     if expanded_status.get("OK", 0) <= original_status.get("OK", 0):
         return False
-    if expanded_status.get("NO_RESPONSE", 0) >= original_status.get("NO_RESPONSE", 0):
+    if expanded_status.get("NO_RESPONSE", 0) >= original_no_response:
         return False
     if not _external_evidence_non_decreasing(original_external, expanded_external):
         return False
