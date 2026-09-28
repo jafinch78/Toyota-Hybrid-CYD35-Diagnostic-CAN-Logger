@@ -71,24 +71,51 @@ class RealValidationGateTests(unittest.TestCase):
 
     def test_gate_is_fail_closed_when_builder_or_platform_evidence_missing(self) -> None:
         validator = load_validator()
-        result = validator.final_gate_status(
-            case_reports=[{"raw_gate": "PASS", "builder_gate": "NOT_RUN"}],
-            windows_1607="NOT_RUN",
-        )
-        self.assertEqual(result, "FAIL")
-
-    def test_gate_pass_requires_every_builder_case_and_windows_1607(self) -> None:
-        validator = load_validator()
         cases = [
-            {"raw_gate": "PASS", "builder_gate": "PASS"},
-            {"raw_gate": "PASS", "builder_gate": "PASS"},
-            {"raw_gate": "PASS", "builder_gate": "PASS"},
+            {"session_id": "S0141", "raw_gate": "PASS", "builder_gate": "NOT_RUN"},
+            {"session_id": "S0149", "raw_gate": "PASS", "builder_gate": "PASS"},
+            {"session_id": "S0128", "raw_gate": "PASS", "builder_gate": "PASS"},
+        ]
+        self.assertEqual(validator.final_gate_status(cases, "PASS"), "FAIL")
+        cases[0]["builder_gate"] = "PASS"
+        self.assertEqual(validator.final_gate_status(cases, "NOT_RUN"), "FAIL")
+
+    def test_gate_requires_exact_three_builder_sessions_and_windows_1607(self) -> None:
+        validator = load_validator()
+        self.assertEqual(
+            validator.REQUIRED_BUILDER_SESSIONS,
+            ("S0141", "S0149", "S0128"),
+        )
+        cases = [
+            {"session_id": "S0141", "raw_gate": "PASS", "builder_gate": "PASS"},
+            {"session_id": "S0149", "raw_gate": "PASS", "builder_gate": "PASS"},
+            {"session_id": "S0128", "raw_gate": "PASS", "builder_gate": "PASS"},
         ]
         self.assertEqual(validator.final_gate_status(cases, "PASS"), "PASS")
-        cases[1]["builder_gate"] = "FAIL"
-        self.assertEqual(validator.final_gate_status(cases, "PASS"), "FAIL")
-        cases[1]["builder_gate"] = "PASS"
-        self.assertEqual(validator.final_gate_status(cases, "NOT_RUN"), "FAIL")
+
+        self.assertEqual(validator.final_gate_status(cases[:2], "PASS"), "FAIL")
+
+        wrong = [dict(item) for item in cases]
+        wrong[2]["session_id"] = "S0999"
+        self.assertEqual(validator.final_gate_status(wrong, "PASS"), "FAIL")
+
+        duplicate = [dict(cases[0]), dict(cases[0]), dict(cases[2])]
+        self.assertEqual(validator.final_gate_status(duplicate, "PASS"), "FAIL")
+
+        extra = cases + [
+            {"session_id": "S0999", "raw_gate": "FAIL", "builder_gate": "FAIL"},
+        ]
+        self.assertEqual(validator.final_gate_status(extra, "PASS"), "FAIL")
+
+        failed = [dict(item) for item in cases]
+        failed[1]["builder_gate"] = "FAIL"
+        self.assertEqual(validator.final_gate_status(failed, "PASS"), "FAIL")
+        self.assertEqual(validator.final_gate_status(cases, "FAIL"), "FAIL")
+
+    def test_parser_has_no_analyzer_smoke_report_gate(self) -> None:
+        validator = load_validator()
+        option_names = {action.dest for action in validator.build_parser()._actions}
+        self.assertNotIn("analyzer_smoke_report", option_names)
 
 
 if __name__ == "__main__":
