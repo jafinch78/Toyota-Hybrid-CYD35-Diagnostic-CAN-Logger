@@ -1,0 +1,109 @@
+{
+  "format": "TVM1_BUILDER_COMPATIBILITY_CAMPAIGN",
+  "version": 1,
+  "date": "2026-09-28",
+  "preprocessor_branch": "feature/native-session-preprocessor-impl",
+  "preprocessor_commit": "cd4451bd8e613a420ca224367133dc71c15b84d2",
+  "preprocessor_ci_run": 36379524387,
+  "preprocessor_ci_conclusion": "success",
+  "preprocessor_artifact_sha256": "7ccc42d0669cbb04a20d082cfa2493c56e42795693290760347883c07892df0e",
+  "builder_ref": "evidence-builder-v1.0.4",
+  "builder_version": "1.0.4",
+  "builder_package_sha256": "10507690da14a71370ec66cae508aeacf8955c7664d5d63fca271d0e50775fb9",
+  "database_version": "0.5.9",
+  "database_sha256": "d91863e8f845749b9286391b6bb68cc8db0141e4366a042f53550feecc2cb446",
+  "processing_options": {
+    "raw_csv": true,
+    "ocr": false,
+    "transcribe": false
+  },
+  "builder_campaign_gate": "PASS",
+  "windows_10_1607_gate": "PENDING",
+  "firmware_authorization": "PENDING_WINDOWS_10_1607",
+  "sessions": {
+    "S0141": {
+      "source_canlog": "CANLOG_091826_182353.zip",
+      "source_canlog_sha256": "0034c9e165a8daff2a53473fc20177a19ba8c3d9b68dd691b73cb178dad24edd",
+      "source_capture": "CAPTURE_20260918_182353_rz.zip",
+      "source_capture_sha256": "5aaf3569be3ce1b6fbd894d84f0fb58a60ce9ef310ae46ebb3d66a29b560d3b6",
+      "raw_gate": "PASS",
+      "builder_gate": "PASS",
+      "raw_record_count": 1021568,
+      "raw_logical_record_sha256": "a9d96bfc8ec9f3ad575dac0f6c82798f9fd73793c457fa6c276b983dfd345089",
+      "rx_count": 1021568,
+      "tx_count": 0,
+      "raw_chunks": [
+        {
+          "name": "RAW_000.TCB",
+          "records": 1021568,
+          "sha256": "824359f8d18b80d863637f7e3f41e8c26d56f1c57f9c06f23aff626efaf148ab",
+          "truncated_tail_bytes": 0
+        }
+      ],
+      "decoded_rows_original": 5286,
+      "decoded_rows_expanded": 8505,
+      "external_diagnostic_comparison": "RAW_RESPONSE_RECOVERY_IMPROVEMENT",
+      "external_diagnostic_summary": "11406 -> 11448 transactions; NO_RESPONSE-only historical sidecar reconstructed as OK=10780, NO_RESPONSE=57, INCOMPLETE_SEQUENCE=569, UNMATCHED_RESPONSE=42"
+    },
+    "S0149": {
+      "source_canlog": "CANLOG_091926_201706.zip",
+      "source_canlog_sha256": "e8f844844e696d8e78f6b13c67238813d142b5c86b7b8b65692a263fa2530f90",
+      "source_capture": "CAPTURE_20260919_201706_rz.zip",
+      "source_capture_sha256": "160268faf1130fe16499b594386ec22717a193e9d1276f98ffec058148fa32da",
+      "raw_gate": "PASS",
+      "builder_gate": "PASS",
+      "raw_record_count": 1708032,
+      "raw_logical_record_sha256": "cf21f7c26666cc5e991aa4455a9198a57347dd310452f7e95029a673b9e979c8",
+      "rx_count": 1707785,
+      "tx_count": 247,
+      "raw_chunks": [
+        {
+          "name": "RAW_000.TCB",
+          "records": 1093248,
+          "sha256": "8e2e17db542bd94622122d65e8e71c2b4929ce4575ecf8a9641237585fa884de",
+          "truncated_tail_bytes": 0
+        },
+        {
+          "name": "RAW_001.TCB",
+          "records": 614784,
+          "sha256": "3c19b4738f0e25525ba747aea327e4860c3fda3bfdcaca8412692a7962fe1a6c",
+          "truncated_tail_bytes": 0
+        }
+      ],
+      "decoded_rows_original": 9215,
+      "decoded_rows_expanded": 15007,
+      "external_diagnostic_comparison": "RAW_RESPONSE_RECOVERY_IMPROVEMENT",
+      "external_diagnostic_summary": "2666 -> 2678 transactions; statuses OK=15/NO_RESPONSE=2625/INCOMPLETE_SEQUENCE=23/UNMATCHED_RESPONSE=3 -> OK=2271/NO_RESPONSE=35/INCOMPLETE_SEQUENCE=357/UNMATCHED_RESPONSE=15"
+    },
+    "S0128": {
+      "source_canlog": "CANLOG_091226_230123.zip",
+      "source_canlog_sha256": "0bd16c28047dc0d455ef707b8dd6fdc34ca6f62d42ff691fd4b16a3dc1e773ef",
+      "source_capture": "CAPTURE_20260912_230123_rz.zip",
+      "source_capture_sha256": "fdce59cceb4f7731fe9acc4b1312b41fa7b30bb5cf6c2affcbd472051f7d6807",
+      "raw_gate": "PASS",
+      "builder_gate": "PASS",
+      "raw_record_count": 1568001,
+      "raw_logical_record_sha256": "da889e91895cbb77319477dc10bd896bb1b9e0045b8667ec9f3ea0ce8238ba81",
+      "rx_count": 1566802,
+      "tx_count": 1199,
+      "raw_chunks": [
+        {
+          "name": "RAW_000.TCB",
+          "records": 1093114,
+          "sha256": "6b369bcb0911a9562b36a167e72304661528a45729f711cea54eb27744447a9f",
+          "truncated_tail_bytes": 0
+        },
+        {
+          "name": "RAW_001.TCB",
+          "records": 474887,
+          "sha256": "9e80a25ab450ae380a2b65bcab8634def7e442837bee83286942e7a9eeef6849",
+          "truncated_tail_bytes": 0
+        }
+      ],
+      "decoded_rows_original": 8941,
+      "decoded_rows_expanded": 13543,
+      "external_diagnostic_comparison": "RAW_RESPONSE_RECOVERY_IMPROVEMENT",
+      "external_diagnostic_summary": "2651 -> 2651 transactions; NEGATIVE_RESPONSE_12 preserved; statuses NO_RESPONSE=235/OK=2279/UNMATCHED_RESPONSE=120/INCOMPLETE_SEQUENCE=16 -> NO_RESPONSE=4/OK=2526/UNMATCHED_RESPONSE=120"
+    }
+  }
+}
