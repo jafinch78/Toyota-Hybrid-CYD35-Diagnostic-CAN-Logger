@@ -29,10 +29,13 @@ The validated offline preprocessor remains responsible for Builder-compatible CA
 
 ## Hardware scope
 
-Supported display/logger profiles remain:
+Supported display/logger profiles are distinct and must not be relabelled:
 
-- `E32R35T_TOUCH`
-- `DORHEA_B0DLNJSSFW_TOUCH`
+- `E32N35T_TOUCH` — preserve the known RC2 fallback touch calibration `{295,3524,310,3487,7}`
+- `E32R35T_TOUCH` — separate profile; use first-boot calibration until a fixed calibration has been physically validated
+- `DORHEA_B0DLNJSSFW_TOUCH` — preserve the validated Dorhea calibration `{295,3524,310,3487,3}`
+
+The earlier simplified-v2.6 draft that excluded E32N35T is superseded here. The acquisition firmware must compile each profile independently. A calibration from one model must never be silently assigned to another.
 
 CAN remains:
 
@@ -240,6 +243,7 @@ Initial SD SPI remains 4 MHz and the known RC2 SPI-controller arrangement remain
 
 Host/static tests and compilation are necessary but not sufficient for promotion. RC2 remains rollback firmware until bench/vehicle validation demonstrates:
 
+- all three supported board profiles compile independently;
 - no panic/reset or BLE allocation regression;
 - clean repeated START/STOP;
 - Wi-Fi maintenance remains exclusive;
