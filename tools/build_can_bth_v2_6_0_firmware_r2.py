@@ -33,6 +33,18 @@ def generate(rc2_dir: Path | str, out_root: Path | str) -> Path:
     ino_path = out_dir / "Toyota_Hybrid_CYD35_CAN_BTH_Logger_v2_6_0.ino"
     source = ino_path.read_text(encoding="utf-8")
 
+    # Arduino preprocessing did not synthesize a usable prototype because the
+    # generated finalizer appears before appendMetaDirect(). Pin the dependency
+    # explicitly instead of relying on sketch auto-prototype behavior.
+    source = _replace_once(
+        source,
+        "void finalizePendingStop() {",
+        "bool appendMetaDirect(uint16_t recordType, uint8_t streamId, uint8_t flags,\n"
+        "                      uint64_t timeUs, const uint8_t *payload, uint16_t payloadLen);\n\n"
+        "void finalizePendingStop() {",
+        "appendMetaDirect forward declaration",
+    )
+
     source = source.replace(
         "// A 1024-record queue still buffers 24 KiB of raw CAN data while preserving a\n"
         "// larger contiguous block for the ESP32 BLE controller and host stack.\n"
@@ -91,6 +103,32 @@ def generate(rc2_dir: Path | str, out_root: Path | str) -> Path:
         "  }\n"
         "  emitStreamFileClose(nowUs, rawFileIndex, 1);",
         "final BTH counters persistence",
+    )
+
+    # Avoid new -Wformat-extra-args diagnostics in the default BTH-off build.
+    source = _replace_once(
+        source,
+        '  snprintf(text, sizeof(text), BTH_CAPTURE_ENABLED ? "%.0f B/s err %lu/%lu" : "OFF (CAN baseline)",\n'
+        '           bthByteRate, (unsigned long)bthParityErrors, (unsigned long)bthFrameErrors);',
+        '  if (BTH_CAPTURE_ENABLED)\n'
+        '    snprintf(text, sizeof(text), "%.0f B/s err %lu/%lu", bthByteRate,\n'
+        '             (unsigned long)bthParityErrors, (unsigned long)bthFrameErrors);\n'
+        '  else\n'
+        '    snprintf(text, sizeof(text), "OFF (CAN baseline)");',
+        "BTH RX display formatting",
+    )
+    source = _replace_once(
+        source,
+        '  snprintf(text, sizeof(text), BTH_CAPTURE_ENABLED ? "%u/%u H%lu drop%lu" : "not allocated",\n'
+        '           (unsigned)bthDepth, (unsigned)BTH_QUEUE_LENGTH, (unsigned long)bthQueueHighWater,\n'
+        '           (unsigned long)bthQueueDrops);',
+        '  if (BTH_CAPTURE_ENABLED)\n'
+        '    snprintf(text, sizeof(text), "%u/%u H%lu drop%lu", (unsigned)bthDepth,\n'
+        '             (unsigned)BTH_QUEUE_LENGTH, (unsigned long)bthQueueHighWater,\n'
+        '             (unsigned long)bthQueueDrops);\n'
+        '  else\n'
+        '    snprintf(text, sizeof(text), "not allocated");',
+        "BTH queue display formatting",
     )
 
     source = source.replace(
