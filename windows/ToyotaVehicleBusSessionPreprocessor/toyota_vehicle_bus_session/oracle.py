@@ -15,6 +15,10 @@ _MATERIAL_WARNING_TERMS = (
     "missing", "no raw", "incomplete", "does not reconcile", "malformed",
     "unsupported", "blocked", "corrupt", "truncated",
 )
+_EXTERNAL_EVIDENCE_FIELDS = (
+    "battery_block_rows", "diagnostic_action_rows", "decoded_field_rows",
+    "resistance_rows", "identity_rows",
+)
 
 
 @dataclass(frozen=True)
@@ -79,6 +83,15 @@ def _normalized_status_counts(value: object) -> dict[str, int]:
     return result
 
 
+def _external_evidence_non_decreasing(
+    original_external: dict[str, Any], expanded_external: dict[str, Any]
+) -> bool:
+    return all(
+        int(expanded_external.get(key, 0) or 0) >= int(original_external.get(key, 0) or 0)
+        for key in _EXTERNAL_EVIDENCE_FIELDS
+    )
+
+
 def _raw_response_recovery_improvement(
     original_external: dict[str, Any],
     expanded_external: dict[str, Any],
@@ -87,12 +100,12 @@ def _raw_response_recovery_improvement(
     raw_stream_identical: bool,
     inventory_identical: bool,
 ) -> bool:
-    """Recognize the narrow historical requests-only evidence-loss pattern.
+    """Recognize monotonic recovery of responses omitted from historical sidecars.
 
-    Some historical logger packages persisted external diagnostic requests but omitted
-    the response rows even though those responses remained in authoritative RAW TCB.
-    The offline expander is allowed to recover those responses only when the underlying
-    Builder raw stream and CAN-ID/direction inventory are identical.
+    This is deliberately fail-closed. Recovery is accepted only when the Builder sees
+    identical authoritative RAW and CAN inventory, the reconstructed transaction set is
+    not smaller, successful responses increase, no-response outcomes decrease, status
+    totals reconcile, and every derived external-evidence class is non-decreasing.
     """
     if not (raw_record_count_equal and raw_stream_identical and inventory_identical):
         return False
@@ -100,15 +113,20 @@ def _raw_response_recovery_improvement(
     expanded_transactions = int(expanded_external.get("transactions", 0) or 0)
     if original_transactions <= 0 or expanded_transactions < original_transactions:
         return False
+
     original_status = _normalized_status_counts(original_external.get("status_counts"))
     expanded_status = _normalized_status_counts(expanded_external.get("status_counts"))
-    if original_status != {"NO_RESPONSE": original_transactions}:
-        return False
-    if expanded_status.get("OK", 0) <= 0:
-        return False
-    if expanded_status.get("NO_RESPONSE", 0) >= original_transactions:
+    if sum(original_status.values()) != original_transactions:
         return False
     if sum(expanded_status.values()) != expanded_transactions:
+        return False
+    if original_status.get("NO_RESPONSE", 0) <= 0:
+        return False
+    if expanded_status.get("OK", 0) <= original_status.get("OK", 0):
+        return False
+    if expanded_status.get("NO_RESPONSE", 0) >= original_status.get("NO_RESPONSE", 0):
+        return False
+    if not _external_evidence_non_decreasing(original_external, expanded_external):
         return False
     return True
 
@@ -213,18 +231,20 @@ def compare_builder_outputs(original_builder_output: Path,
             or original_external_status != expanded_external_status
         )
         external_comparison = "EXACT"
+        recovery_improvement = False
         if external_mismatch:
-            if _raw_response_recovery_improvement(
+            recovery_improvement = _raw_response_recovery_improvement(
                 original_external,
                 expanded_external,
                 raw_record_count_equal=raw_record_count_equal,
                 raw_stream_identical=raw_stream_identical,
                 inventory_identical=inventory_identical,
-            ):
+            )
+            if recovery_improvement:
                 external_comparison = "RAW_RESPONSE_RECOVERY_IMPROVEMENT"
                 warnings.append(
                     f"{name}: RAW_RESPONSE_RECOVERY_IMPROVEMENT: authoritative identical RAW recovered "
-                    f"external responses omitted by the historical requests-only evidence product "
+                    f"external responses omitted by the historical sidecar evidence "
                     f"({original_external_transactions} -> {expanded_external_transactions} transactions; "
                     f"statuses {original_external_status} -> {expanded_external_status})")
             else:
@@ -232,9 +252,16 @@ def compare_builder_outputs(original_builder_output: Path,
                     local_failures.append(f"{name}: external diagnostic transaction count differs")
                 if original_external_status != expanded_external_status:
                     local_failures.append(f"{name}: external diagnostic status-count distribution differs")
-        for key in ("battery_block_rows", "diagnostic_action_rows", "decoded_field_rows",
-                    "resistance_rows", "identity_rows"):
-            if int(original_external.get(key, 0) or 0) != int(expanded_external.get(key, 0) or 0):
+
+        for key in _EXTERNAL_EVIDENCE_FIELDS:
+            original_value = int(original_external.get(key, 0) or 0)
+            expanded_value = int(expanded_external.get(key, 0) or 0)
+            if recovery_improvement:
+                if expanded_value < original_value:
+                    local_failures.append(
+                        f"{name}: {key} decreased during RAW response recovery: "
+                        f"original={original_value}, expanded={expanded_value}")
+            elif original_value != expanded_value:
                 local_failures.append(f"{name}: {key} differs")
 
         original_profile = original.get("profile_evidence", {}) or {}
