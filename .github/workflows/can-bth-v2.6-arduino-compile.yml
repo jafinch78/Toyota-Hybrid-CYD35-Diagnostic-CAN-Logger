@@ -40,24 +40,114 @@ jobs:
           cp -a firmware/Toyota_Hybrid_CYD35_Diagnostic_CAN_Logger_v2_5_0 .ci_rc2/firmware/
           test "$(git hash-object .ci_rc2/firmware/Toyota_Hybrid_CYD35_Diagnostic_CAN_Logger_v2_5_0/Toyota_Hybrid_CYD35_Diagnostic_CAN_Logger_v2_5_0.ino)" = "bbc7421da2bfc684324123b3232895cdcfd6c23d"
 
-      - name: Generate default CAN-only acquisition build
+      - name: Generate default CAN-only acquisition source
         shell: bash
         run: |
           set -euo pipefail
-          rm -rf .ci_generated
-          python tools/build_can_bth_v2_6_0_firmware_r2.py .ci_rc2/firmware/Toyota_Hybrid_CYD35_Diagnostic_CAN_Logger_v2_5_0 .ci_generated
+          rm -rf .ci_generated .ci_build .ci_package
+          python tools/build_can_bth_v2_6_0_firmware_r3.py .ci_rc2/firmware/Toyota_Hybrid_CYD35_Diagnostic_CAN_Logger_v2_5_0 .ci_generated
           SKETCH=.ci_generated/Toyota_Hybrid_CYD35_CAN_BTH_Logger_v2_6_0
-          grep -q '#define ENABLE_BTH_CAPTURE 0' "$SKETCH/Toyota_Hybrid_CYD35_CAN_BTH_Logger_v2_6_0.ino"
-          grep -q 'CAN_QUEUE_LENGTH = 768' "$SKETCH/Toyota_Hybrid_CYD35_CAN_BTH_Logger_v2_6_0.ino"
-          grep -q 'CAN_BATCH_LENGTH = 128' "$SKETCH/Toyota_Hybrid_CYD35_CAN_BTH_Logger_v2_6_0.ino"
+          INO="$SKETCH/Toyota_Hybrid_CYD35_CAN_BTH_Logger_v2_6_0.ino"
+          grep -q '#define ENABLE_BTH_CAPTURE 0' "$INO"
+          grep -q 'CAN_QUEUE_LENGTH = 768' "$INO"
+          grep -q 'CAN_BATCH_LENGTH = 128' "$INO"
+          grep -q 'CYD_BOARD_PROFILE_E32N35T 3' "$INO"
+          grep -q 'E32N35T_TOUCH' "$INO"
           cp "$SKETCH/TFT_eSPI_User_Setup_CYD35.h" "$HOME/Arduino/libraries/TFT_eSPI/User_Setup.h"
+          mkdir -p .ci_package/source
+          cp -a "$SKETCH" .ci_package/source/
 
-      - name: Compile default Dorhea CAN-only build
+      - name: Compile Dorhea CAN-only build
         shell: bash
         run: |
           set -euo pipefail
           SKETCH=.ci_generated/Toyota_Hybrid_CYD35_CAN_BTH_Logger_v2_6_0
+          mkdir -p .ci_build/dorhea
           arduino-cli compile \
             --fqbn esp32:esp32:esp32:PartitionScheme=huge_app \
             --warnings all \
+            --output-dir .ci_build/dorhea \
             "$SKETCH"
+
+      - name: Compile E32N35T CAN-only build
+        shell: bash
+        run: |
+          set -euo pipefail
+          INO=.ci_generated/Toyota_Hybrid_CYD35_CAN_BTH_Logger_v2_6_0/Toyota_Hybrid_CYD35_CAN_BTH_Logger_v2_6_0.ino
+          python - "$INO" <<'PY'
+          from pathlib import Path
+          import sys
+          p = Path(sys.argv[1])
+          s = p.read_text(encoding='utf-8')
+          old = '#define CYD_BOARD_PROFILE_SELECT CYD_BOARD_PROFILE_DORHEA'
+          new = '#define CYD_BOARD_PROFILE_SELECT CYD_BOARD_PROFILE_E32N35T'
+          if s.count(old) != 1:
+              raise SystemExit('expected one default Dorhea profile selector')
+          p.write_text(s.replace(old, new, 1), encoding='utf-8', newline='\n')
+          PY
+          mkdir -p .ci_build/e32n35t
+          arduino-cli compile \
+            --fqbn esp32:esp32:esp32:PartitionScheme=huge_app \
+            --warnings all \
+            --output-dir .ci_build/e32n35t \
+            .ci_generated/Toyota_Hybrid_CYD35_CAN_BTH_Logger_v2_6_0
+
+      - name: Compile E32R35T CAN-only build
+        shell: bash
+        run: |
+          set -euo pipefail
+          INO=.ci_generated/Toyota_Hybrid_CYD35_CAN_BTH_Logger_v2_6_0/Toyota_Hybrid_CYD35_CAN_BTH_Logger_v2_6_0.ino
+          python - "$INO" <<'PY'
+          from pathlib import Path
+          import sys
+          p = Path(sys.argv[1])
+          s = p.read_text(encoding='utf-8')
+          old = '#define CYD_BOARD_PROFILE_SELECT CYD_BOARD_PROFILE_E32N35T'
+          new = '#define CYD_BOARD_PROFILE_SELECT CYD_BOARD_PROFILE_E32R35T'
+          if s.count(old) != 1:
+              raise SystemExit('expected one N35T profile selector')
+          p.write_text(s.replace(old, new, 1), encoding='utf-8', newline='\n')
+          PY
+          mkdir -p .ci_build/e32r35t
+          arduino-cli compile \
+            --fqbn esp32:esp32:esp32:PartitionScheme=huge_app \
+            --warnings all \
+            --output-dir .ci_build/e32r35t \
+            .ci_generated/Toyota_Hybrid_CYD35_CAN_BTH_Logger_v2_6_0
+
+      - name: Assemble CAN-only test package
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .ci_package/bin/DORHEA .ci_package/bin/E32N35T .ci_package/bin/E32R35T
+          cp .ci_build/dorhea/*.bin .ci_build/dorhea/*.elf .ci_package/bin/DORHEA/ 2>/dev/null || true
+          cp .ci_build/e32n35t/*.bin .ci_build/e32n35t/*.elf .ci_package/bin/E32N35T/ 2>/dev/null || true
+          cp .ci_build/e32r35t/*.bin .ci_build/e32r35t/*.elf .ci_package/bin/E32R35T/ 2>/dev/null || true
+          cat > .ci_package/BUILD_INFO.txt <<EOF
+          Toyota Hybrid CYD35 CAN+BTH Logger v2.6 CAN-only performance baseline
+          source_commit=${GITHUB_SHA}
+          rc2_source_blob=bbc7421da2bfc684324123b3232895cdcfd6c23d
+          esp32_arduino_core=3.3.10
+          tft_espi=2.5.43
+          fqbn=esp32:esp32:esp32
+          partition=huge_app
+          bth_capture=OFF
+          can_queue=768
+          can_batch=128
+          can_bitrate=500000
+          sd_spi_hz=4000000
+          profiles=DORHEA,E32N35T,E32R35T
+          EOF
+          (cd .ci_package && find . -type f ! -name SHA256SUMS.txt -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS.txt)
+          (cd .ci_package && zip -qr ../Toyota_Hybrid_CYD35_CAN_BTH_v2.6_CAN_ONLY_TEST.zip .)
+          sha256sum .ci_package/../Toyota_Hybrid_CYD35_CAN_BTH_v2.6_CAN_ONLY_TEST.zip
+
+      - name: Upload CAN-only test package
+        uses: actions/upload-artifact@v4
+        with:
+          name: Toyota_Hybrid_CYD35_CAN_BTH_v2.6_CAN_ONLY_TEST
+          path: |
+            Toyota_Hybrid_CYD35_CAN_BTH_v2.6_CAN_ONLY_TEST.zip
+            .ci_package/BUILD_INFO.txt
+            .ci_package/SHA256SUMS.txt
+          if-no-files-found: error
