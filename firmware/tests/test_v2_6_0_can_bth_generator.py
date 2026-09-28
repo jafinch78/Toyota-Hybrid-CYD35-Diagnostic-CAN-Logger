@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-GENERATOR = ROOT / "tools" / "build_can_bth_v2_6_0_firmware.py"
+GENERATOR = ROOT / "tools" / "build_can_bth_v2_6_0_firmware_r2.py"
 RC2_DIR = ROOT / ".ci_rc2" / "firmware" / "Toyota_Hybrid_CYD35_Diagnostic_CAN_Logger_v2_5_0"
 
 
@@ -14,7 +14,7 @@ class CanBthV260GeneratorTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         if not GENERATOR.exists():
-            raise AssertionError("CAN+BTH v2.6 generator does not exist yet")
+            raise AssertionError("CAN+BTH v2.6 R2 generator does not exist yet")
         spec = importlib.util.spec_from_file_location("canbthgen", GENERATOR)
         module = importlib.util.module_from_spec(spec)
         assert spec.loader is not None
@@ -26,6 +26,7 @@ class CanBthV260GeneratorTests(unittest.TestCase):
         cls.sketch_dir = cls.out_root / "Toyota_Hybrid_CYD35_CAN_BTH_Logger_v2_6_0"
         cls.source = (cls.sketch_dir / "Toyota_Hybrid_CYD35_CAN_BTH_Logger_v2_6_0.ino").read_text(encoding="utf-8")
         cls.bth_h = (cls.sketch_dir / "BTH1Raw.h").read_text(encoding="utf-8")
+        cls.meta_h = (cls.sketch_dir / "TVM1Meta.h").read_text(encoding="utf-8")
         cls.readme = (cls.sketch_dir / "README.md").read_text(encoding="utf-8")
 
     @classmethod
@@ -93,13 +94,24 @@ class CanBthV260GeneratorTests(unittest.TestCase):
         self.assertNotIn("tft.", task)
 
     def test_bth_and_can_are_separate_tvm1_streams(self):
-        self.assertIn("TVM1_STREAM_CAN = 1", self.source + self.bth_h)
-        self.assertIn("TVM1_STREAM_BTH = 2", self.source + self.bth_h)
+        self.assertIn("TVM1_STREAM_CAN = 1", self.meta_h)
+        self.assertIn("TVM1_STREAM_BTH = 2", self.meta_h)
         self.assertIn("TVM1_STREAM_TYPE_BTH", self.source)
         self.assertIn("TVM1_RAW_FORMAT_BTH1", self.source)
         self.assertIn("emitBthStreamRegister", self.source)
         self.assertIn("BTH_000.BTH", self.source)
         self.assertIn("registered_stream_count", self.readme)
+
+    def test_ble_stop_closes_bth_intake_before_pending_stop(self):
+        branch = self.source.split("if (command.opcode == 2)", 1)[1].split("if (command.opcode == 3)", 1)[0]
+        self.assertLess(branch.index("bthSessionAccepting = false"), branch.index("stopPending = true"))
+
+    def test_bth_periodic_and_final_counters_are_persisted(self):
+        self.assertIn("lastBthCountersMs", self.source)
+        loop = self.source.split("void loop()", 1)[1]
+        self.assertIn("millis() - lastBthCountersMs >= 5000", loop)
+        finalizer = self.source.split("void finalizePendingStop()", 1)[1].split("void loop()", 1)[0]
+        self.assertLess(finalizer.index("emitBthCounters(nowUs)"), finalizer.index("serviceMetaQueue()", finalizer.index("emitBthCounters(nowUs)")))
 
     def test_main_loop_persists_can_before_bth_and_bth_before_noncritical_work(self):
         loop = self.source.split("void loop()", 1)[1]
