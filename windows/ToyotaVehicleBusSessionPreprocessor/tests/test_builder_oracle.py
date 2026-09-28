@@ -20,6 +20,7 @@ def make_builder_output(root: Path, *, raw_count: int = 3, raw_variant: str = "b
                         warnings: list[str] | None = None, decoded_rows: int = 2,
                         db_hash: str = "dbhash", selected_profile: str = "PRIUS_GEN2",
                         external_transactions: int = 2, external_ok: int = 2,
+                        external_status_counts: dict[str, int] | None = None,
                         battery_rows: int = 1, action_rows: int = 1) -> Path:
     root.mkdir(parents=True)
     session = root / "S0001"
@@ -41,6 +42,7 @@ def make_builder_output(root: Path, *, raw_count: int = 3, raw_variant: str = "b
                ["7E8", "RX", 1, 300, 300, "0.000000", "0.000", "4:1", "0x00"]][:raw_count])
     write_csv(session / "DECODED_ALIGNED.csv", ["Time_ms", "SOC_pct"],
               [[index * 100, 50 + index] for index in range(decoded_rows)])
+    statuses = external_status_counts if external_status_counts is not None else {"OK": external_ok}
     summary = {
         "session": "S0001",
         "compatibility": {"supported": True, "warnings": [], "errors": []},
@@ -52,7 +54,7 @@ def make_builder_output(root: Path, *, raw_count: int = 3, raw_variant: str = "b
         "diagnostic_status_counts": {"OK": 1},
         "external_diagnostics": {
             "transactions": external_transactions,
-            "status_counts": {"OK": external_ok},
+            "status_counts": statuses,
             "battery_block_rows": battery_rows,
             "decoded_field_rows": 2,
             "resistance_rows": 1,
@@ -114,6 +116,25 @@ class BuilderOracleTests(unittest.TestCase):
             self.assertIn("external diagnostic transaction count", joined)
             self.assertIn("battery_block_rows", joined)
             self.assertIn("diagnostic_action_rows", joined)
+
+    def test_requests_only_external_history_may_gain_responses_from_identical_raw(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            original = make_builder_output(
+                base / "original",
+                external_transactions=2,
+                external_status_counts={"NO_RESPONSE": 2},
+            )
+            expanded = make_builder_output(
+                base / "expanded",
+                external_transactions=3,
+                external_status_counts={"OK": 2, "NO_RESPONSE": 0, "UNMATCHED_RESPONSE": 1},
+            )
+            report = compare_builder_outputs(original, expanded)
+            self.assertTrue(report.passed)
+            self.assertEqual(report.blocking_failures, ())
+            self.assertTrue(any("RAW_RESPONSE_RECOVERY_IMPROVEMENT" in item for item in report.warnings))
+            self.assertEqual(report.sessions[0]["external_diagnostic_comparison"], "RAW_RESPONSE_RECOVERY_IMPROVEMENT")
 
     def test_database_profile_and_sync_must_match(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
