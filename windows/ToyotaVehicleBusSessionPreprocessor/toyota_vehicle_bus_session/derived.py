@@ -2,13 +2,12 @@ from __future__ import annotations
 
 import csv
 from pathlib import Path
-from typing import Iterable
 
 from .diagnostics import reconstruct_logger_diagnostics
 from .external_transactions import reconstruct_external_transactions
 from .meta import decode_record_payload
 from .schemas import PROFILE_LABELS
-from .tcb1 import TcbFrame, iter_tcb_frames
+from .tcb1 import iter_tcb_frames
 
 LEGACY_DECODED_HEADER = [
     "Time_ms", "Profile", "ProfileConfidence", "SOC_pct", "Pack_V", "Pack_A", "Pack_kW",
@@ -98,7 +97,6 @@ class LegacyDecodedProjector:
         payload = bytes(getattr(tx, "payload", b""))
         if service is None or not payload:
             return
-        # ISO-TP payload normally includes positive service and PID before data.
         data = payload[2:] if pid is not None and len(payload) >= 2 else payload[1:]
 
         if service == 0x01 and pid is not None:
@@ -122,18 +120,19 @@ class LegacyDecodedProjector:
             self._observe_phv_21(pid, data)
 
     def _observe_gen2_21(self, pid: int, d: bytes) -> None:
-        if pid == 0xC3 and len(d) >= 31:
+        if pid == 0xC3 and len(d) >= 28:
             self._set("Engine_RPM", _word_be(d, 14))
             self._set("SOC_pct", 0.392 * d[18])
             self._set("MG1_Inv_F", 1.8 * d[24] - 58.0)
             self._set("MG2_Inv_F", 1.8 * d[25] - 58.0)
             self._set("MG1_Temp_F", 1.8 * d[26] - 58.0)
             self._set("MG2_Temp_F", 1.8 * d[27] - 58.0)
-            volts = 2.0 * d[28]
-            amps = 2.0 * d[30] - 256.0
-            self._set("Pack_V", volts)
-            self._set("Pack_A", amps)
-            self._set("Pack_kW", volts * amps / 1000.0)
+            if len(d) >= 31:
+                volts = 2.0 * d[28]
+                amps = 2.0 * d[30] - 256.0
+                self._set("Pack_V", volts)
+                self._set("Pack_A", amps)
+                self._set("Pack_kW", volts * amps / 1000.0)
             self.diag_seen = True
         elif pid == 0xC4 and len(d) >= 6:
             self._set("Converter_Temp_F", 1.8 * d[5] - 58.0)
@@ -173,8 +172,6 @@ class LegacyDecodedProjector:
             self.diag_seen = True
 
     def _observe_phv_21(self, pid: int, d: bytes) -> None:
-        # These are the already-established PHV live-display projections used by
-        # the project tests. They are compatibility decodes, not new discovery.
         if pid == 0x01 and len(d) >= 22:
             self._set("Engine_RPM", int(d[2]) * 20)
             self._set("SOC_pct", d[21] * 20.0 / 51.0)
