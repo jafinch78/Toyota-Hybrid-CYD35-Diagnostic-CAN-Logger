@@ -4,12 +4,14 @@ import argparse
 import hashlib
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import platform
 import re
 import shutil
 import sys
+import tempfile
 from typing import Any
+import zipfile
 
 from toyota_vehicle_bus_session.model import ExpansionOptions
 from toyota_vehicle_bus_session.packaging import expand_native_session
@@ -19,6 +21,7 @@ from toyota_vehicle_bus_session.validation_fixture import synthesize_native_fixt
 
 WINDOWS_10_1607_BUILD = 14393
 REPORT_NAME = "WINDOWS_1607_VALIDATION.json"
+_RAW_NAME = re.compile(r"^RAW_(\d+)\.TCB$", re.IGNORECASE)
 
 
 def sha256_file(path: Path) -> str:
@@ -57,17 +60,60 @@ def raw_snapshot(paths: list[Path] | tuple[Path, ...]) -> dict[str, Any]:
     }
 
 
+def snapshot_legacy_canlog(source_canlog: Path) -> dict[str, Any]:
+    """Scan authoritative RAW members directly from the original CANLOG ZIP."""
+    source = Path(source_canlog)
+    if not source.is_file():
+        raise ValueError(f"CANLOG not found: {source}")
+    with tempfile.TemporaryDirectory(prefix="tvm1_win1607_source_raw_") as td:
+        temp_root = Path(td)
+        indexed: list[tuple[int, str, str]] = []
+        seen_basenames: set[str] = set()
+        with zipfile.ZipFile(source, "r") as archive:
+            for member in archive.infolist():
+                pure = PurePosixPath(member.filename)
+                if pure.is_absolute() or ".." in pure.parts:
+                    raise ValueError(f"ZIP path traversal rejected: {member.filename}")
+                basename = pure.name
+                match = _RAW_NAME.match(basename)
+                if not match or member.is_dir():
+                    continue
+                normalized = basename.upper()
+                if normalized in seen_basenames:
+                    raise ValueError(f"duplicate RAW member basename: {basename}")
+                seen_basenames.add(normalized)
+                indexed.append((int(match.group(1)), member.filename, basename))
+
+            if not indexed:
+                raise ValueError("CANLOG contains no RAW_*.TCB members")
+            indexed.sort(key=lambda item: item[0])
+            indices = [item[0] for item in indexed]
+            if indices[0] != 0:
+                raise ValueError("CANLOG is missing RAW_000.TCB")
+            if indices != list(range(indices[-1] + 1)):
+                raise ValueError(f"CANLOG has noncontiguous RAW chunk indices: {indices}")
+
+            raw_paths: list[Path] = []
+            for _index, member_name, basename in indexed:
+                target = temp_root / basename
+                with archive.open(member_name, "r") as src, target.open("wb") as dst:
+                    shutil.copyfileobj(src, dst, length=1024 * 1024)
+                raw_paths.append(target)
+        return raw_snapshot(tuple(raw_paths))
+
+
 def compare_raw_identity(reference: dict[str, Any], candidate: dict[str, Any]) -> list[str]:
     failures: list[str] = []
-    if reference.get("logical_record_sha256") != candidate.get("logical_record_sha256"):
-        failures.append(
-            "logical RAW stream SHA-256 mismatch: "
-            f"reference={reference.get('logical_record_sha256')} "
-            f"candidate={candidate.get('logical_record_sha256')}")
-    if reference.get("record_count") != candidate.get("record_count"):
-        failures.append(
-            "RAW record count mismatch: "
-            f"reference={reference.get('record_count')} candidate={candidate.get('record_count')}")
+    for key, label in (
+        ("logical_record_sha256", "logical RAW stream SHA-256"),
+        ("record_count", "RAW record count"),
+        ("rx_count", "RX count"),
+        ("tx_count", "TX count"),
+    ):
+        if reference.get(key) != candidate.get(key):
+            failures.append(
+                f"{label} mismatch: reference={reference.get(key)} candidate={candidate.get(key)}")
+
     reference_chunks = dict(reference.get("chunks", {}) or {})
     candidate_chunks = dict(candidate.get("chunks", {}) or {})
     if set(reference_chunks) != set(candidate_chunks):
@@ -79,9 +125,10 @@ def compare_raw_identity(reference: dict[str, Any], candidate: dict[str, Any]) -
             failures.append(
                 f"{name} SHA-256 mismatch: reference={reference_chunks[name]} "
                 f"candidate={candidate_chunks[name]}")
+
     reference_tails = dict(reference.get("truncated_tail_bytes", {}) or {})
     candidate_tails = dict(candidate.get("truncated_tail_bytes", {}) or {})
-    if reference_tails and reference_tails != candidate_tails:
+    if reference_tails != candidate_tails:
         failures.append(
             f"RAW truncated-tail status mismatch: reference={reference_tails} "
             f"candidate={candidate_tails}")
@@ -123,6 +170,8 @@ def run_validation(source_canlog: Path, output_root: Path) -> dict[str, Any]:
         "source_raw": None,
         "native_raw": None,
         "expanded_raw": None,
+        "synthesis_report": None,
+        "expansion_report": None,
         "failures": [],
         "final_errorlevel": 1,
     }
@@ -139,6 +188,11 @@ def run_validation(source_canlog: Path, output_root: Path) -> dict[str, Any]:
                 f"os_name={os.name!r}, build={build!r}")
             return report
 
+        # Scan original RAW before performing either transformation. This is the
+        # independent reference for every identity comparison below.
+        source_raw = snapshot_legacy_canlog(source)
+        report["source_raw"] = source_raw
+
         work = output / "runtime_work"
         if work.exists():
             shutil.rmtree(work)
@@ -146,18 +200,9 @@ def run_validation(source_canlog: Path, output_root: Path) -> dict[str, Any]:
 
         native = synthesize_native_fixture(source, work / "native")
         report["session_id"] = native.session_id
-        synthesis = json.loads(native.report_path.read_text(encoding="utf-8-sig"))
+        report["synthesis_report"] = str(native.report_path.resolve())
         native_paths = tuple(sorted(native.native_session_dir.glob("RAW_*.TCB")))
         native_raw = raw_snapshot(native_paths)
-        source_raw = {
-            "logical_record_sha256": synthesis.get("raw_logical_sha256"),
-            "record_count": native_raw["record_count"],
-            "rx_count": native_raw["rx_count"],
-            "tx_count": native_raw["tx_count"],
-            "chunks": dict(synthesis.get("raw_identity", {}) or {}),
-            "truncated_tail_bytes": dict(native_raw["truncated_tail_bytes"]),
-        }
-        report["source_raw"] = source_raw
         report["native_raw"] = native_raw
         failures.extend(
             f"native: {item}" for item in compare_raw_identity(source_raw, native_raw))
@@ -170,6 +215,7 @@ def run_validation(source_canlog: Path, output_root: Path) -> dict[str, Any]:
             work / "expanded",
             options=ExpansionOptions(make_zip=True),
         )
+        report["expansion_report"] = str(expansion.validation_report.resolve())
         expanded_paths = tuple(sorted(expansion.legacy_session_dir.glob("RAW_*.TCB")))
         expanded_raw = raw_snapshot(expanded_paths)
         report["expanded_raw"] = expanded_raw
@@ -210,6 +256,8 @@ def main(argv: list[str] | None = None) -> int:
         "report": str(report_path),
         "windows_build": report["windows_build"],
         "raw_record_count": (report.get("source_raw") or {}).get("record_count"),
+        "rx_count": (report.get("source_raw") or {}).get("rx_count"),
+        "tx_count": (report.get("source_raw") or {}).get("tx_count"),
         "final_errorlevel": report["final_errorlevel"],
     }, indent=2, sort_keys=True))
     return int(report["final_errorlevel"])
