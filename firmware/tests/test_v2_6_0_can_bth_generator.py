@@ -41,6 +41,17 @@ class CanBthV260GeneratorTests(unittest.TestCase):
         self.assertIn("CAN_QUEUE_LENGTH = 768", self.source)
         self.assertIn("CAN_BATCH_LENGTH = 128", self.source)
 
+    def test_bth_defaults_off_without_allocating_runtime_resources(self):
+        self.assertIn("#define ENABLE_BTH_CAPTURE 0", self.source)
+        self.assertIn("BTH_CAPTURE_ENABLED = ENABLE_BTH_CAPTURE != 0", self.source)
+        init_start = self.source.index("bool initializeBthRuntime()")
+        init_end = self.source.index("void shutdownBthRuntime()", init_start)
+        init_body = self.source[init_start:init_end]
+        self.assertIn("if (!BTH_CAPTURE_ENABLED) return true;", init_body)
+        self.assertLess(init_body.index("if (!BTH_CAPTURE_ENABLED) return true;"), init_body.index("xQueueCreate(BTH_QUEUE_LENGTH, sizeof(BthChunk))"))
+        self.assertLess(init_body.index("if (!BTH_CAPTURE_ENABLED) return true;"), init_body.index("uart_driver_install"))
+        self.assertLess(init_body.index("if (!BTH_CAPTURE_ENABLED) return true;"), init_body.index("xTaskCreatePinnedToCore"))
+
     def test_bth_is_uart2_rx_only_on_gpio35_at_19200_8o1(self):
         self.assertIn("BTH_RX_PIN GPIO_NUM_35", self.source)
         self.assertIn("UART_NUM_2", self.source)
