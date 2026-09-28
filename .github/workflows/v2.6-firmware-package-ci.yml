@@ -7,13 +7,15 @@ on:
   workflow_dispatch:
 
 jobs:
-  generator-contract:
+  build-test-package:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - uses: arduino/setup-arduino-cli@v2
+
       - name: Stage immutable RC2 source fixture
         shell: bash
         run: |
@@ -21,5 +23,71 @@ jobs:
           mkdir -p .ci_rc2/firmware
           cp -a firmware/Toyota_Hybrid_CYD35_Diagnostic_CAN_Logger_v2_5_0 .ci_rc2/firmware/
           test "$(git hash-object .ci_rc2/firmware/Toyota_Hybrid_CYD35_Diagnostic_CAN_Logger_v2_5_0/Toyota_Hybrid_CYD35_Diagnostic_CAN_Logger_v2_5_0.ino)" = "bbc7421da2bfc684324123b3232895cdcfd6c23d"
-      - name: Run RED-GREEN generator contract
+
+      - name: Run firmware source-contract tests
         run: python -m unittest firmware.tests.test_v2_6_0_generator -v
+
+      - name: Generate Arduino IDE sketch folder
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf build/v2_6_0
+          mkdir -p build/v2_6_0
+          python tools/build_v2_6_0_firmware.py \
+            .ci_rc2/firmware/Toyota_Hybrid_CYD35_Diagnostic_CAN_Logger_v2_5_0 \
+            build/v2_6_0
+          test -f build/v2_6_0/Toyota_Hybrid_CYD35_Diagnostic_CAN_Logger_v2_6_0/Toyota_Hybrid_CYD35_Diagnostic_CAN_Logger_v2_6_0.ino
+          test -f build/v2_6_0/Toyota_Hybrid_CYD35_Diagnostic_CAN_Logger_v2_6_0/TVM1Meta.h
+
+      - name: Install ESP32 core 3.3.10 and TFT_eSPI
+        shell: bash
+        run: |
+          set -euo pipefail
+          arduino-cli config init --overwrite
+          arduino-cli config add board_manager.additional_urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          arduino-cli core update-index
+          arduino-cli core install esp32:esp32@3.3.10
+          arduino-cli lib install "TFT_eSPI@2.5.43"
+          TFT_DIR="$(find "$HOME/Arduino/libraries" -maxdepth 1 -type d -name 'TFT_eSPI*' | head -n 1)"
+          test -n "$TFT_DIR"
+          cp build/v2_6_0/Toyota_Hybrid_CYD35_Diagnostic_CAN_Logger_v2_6_0/TFT_eSPI_User_Setup_CYD35.h "$TFT_DIR/User_Setup.h"
+          grep -Eq '^#define[[:space:]]+SPI_FREQUENCY[[:space:]]+80000000' "$TFT_DIR/User_Setup.h"
+
+      - name: Compile Dorhea profile
+        shell: bash
+        run: |
+          set -euo pipefail
+          arduino-cli compile \
+            --fqbn esp32:esp32:esp32:PartitionScheme=huge_app \
+            --warnings all \
+            build/v2_6_0/Toyota_Hybrid_CYD35_Diagnostic_CAN_Logger_v2_6_0
+
+      - name: Compile E32R35T profile
+        shell: bash
+        run: |
+          set -euo pipefail
+          arduino-cli compile \
+            --fqbn esp32:esp32:esp32:PartitionScheme=huge_app \
+            --warnings all \
+            --build-property 'compiler.cpp.extra_flags=-DCYD_BOARD_PROFILE_SELECT=2' \
+            build/v2_6_0/Toyota_Hybrid_CYD35_Diagnostic_CAN_Logger_v2_6_0
+
+      - name: Package Arduino IDE ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd build/v2_6_0
+          zip -r -9 ../Toyota_Hybrid_CYD35_Diagnostic_CAN_Logger_v2_6_0_Arduino_IDE.zip \
+            Toyota_Hybrid_CYD35_Diagnostic_CAN_Logger_v2_6_0
+          cd ../..
+          unzip -l build/Toyota_Hybrid_CYD35_Diagnostic_CAN_Logger_v2_6_0_Arduino_IDE.zip
+          sha256sum build/Toyota_Hybrid_CYD35_Diagnostic_CAN_Logger_v2_6_0_Arduino_IDE.zip | tee build/Toyota_Hybrid_CYD35_Diagnostic_CAN_Logger_v2_6_0_Arduino_IDE.zip.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Toyota_Hybrid_CYD35_Diagnostic_CAN_Logger_v2_6_0_Arduino_IDE
+          path: |
+            build/Toyota_Hybrid_CYD35_Diagnostic_CAN_Logger_v2_6_0_Arduino_IDE.zip
+            build/Toyota_Hybrid_CYD35_Diagnostic_CAN_Logger_v2_6_0_Arduino_IDE.zip.sha256
+          if-no-files-found: error
+          retention-days: 30
