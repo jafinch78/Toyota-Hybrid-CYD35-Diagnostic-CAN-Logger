@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import importlib.util
 from pathlib import Path
+import struct
 import sys
+import tempfile
 import unittest
+import zipfile
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "validate_windows_1607.py"
 
@@ -18,6 +21,18 @@ def load_validator():
     return module
 
 
+HEADER = b"TCB1" + bytes([1, 24]) + b"\0" * 10
+REC = struct.Struct("<QI8sBBBB")
+
+
+def tcb_bytes(records: list[tuple[int, int]]) -> bytes:
+    body = b"".join(
+        REC.pack(t, 0x123, b"\x01" + b"\0" * 7, 1, 0, 0, direction)
+        for t, direction in records
+    )
+    return HEADER + body
+
+
 class Windows1607ValidationTests(unittest.TestCase):
     def test_exact_windows_10_1607_build_is_required(self) -> None:
         validator = load_validator()
@@ -26,26 +41,58 @@ class Windows1607ValidationTests(unittest.TestCase):
         self.assertFalse(validator.is_windows_10_1607("posix", 14393))
         self.assertFalse(validator.is_windows_10_1607("nt", None))
 
-    def test_raw_identity_comparison_requires_same_hashes_counts_and_logical_stream(self) -> None:
+    def test_original_canlog_raw_is_scanned_directly_from_zip(self) -> None:
+        validator = load_validator()
+        with tempfile.TemporaryDirectory() as td:
+            archive = Path(td) / "CANLOG.zip"
+            with zipfile.ZipFile(archive, "w") as out:
+                out.writestr("S0001/RAW_000.TCB", tcb_bytes([(1, 0), (2, 1)]))
+                out.writestr("S0001/RAW_001.TCB", tcb_bytes([(3, 0)]))
+                out.writestr("S0001/MANIFEST.JSON", "{}")
+            snapshot = validator.snapshot_legacy_canlog(archive)
+        self.assertEqual(snapshot["record_count"], 3)
+        self.assertEqual(snapshot["rx_count"], 2)
+        self.assertEqual(snapshot["tx_count"], 1)
+        self.assertEqual(sorted(snapshot["chunks"]), ["RAW_000.TCB", "RAW_001.TCB"])
+        self.assertEqual(snapshot["truncated_tail_bytes"], {"RAW_000.TCB": 0, "RAW_001.TCB": 0})
+
+    def test_original_canlog_rejects_missing_raw_zero_and_path_traversal(self) -> None:
+        validator = load_validator()
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            missing = root / "missing.zip"
+            with zipfile.ZipFile(missing, "w") as out:
+                out.writestr("S0001/RAW_001.TCB", tcb_bytes([(1, 0)]))
+            with self.assertRaisesRegex(ValueError, "RAW_000"):
+                validator.snapshot_legacy_canlog(missing)
+
+            traversal = root / "traversal.zip"
+            with zipfile.ZipFile(traversal, "w") as out:
+                out.writestr("../RAW_000.TCB", tcb_bytes([(1, 0)]))
+            with self.assertRaisesRegex(ValueError, "path traversal"):
+                validator.snapshot_legacy_canlog(traversal)
+
+    def test_raw_identity_comparison_requires_hashes_counts_directions_and_logical_stream(self) -> None:
         validator = load_validator()
         original = {
             "logical_record_sha256": "abc",
             "record_count": 10,
+            "rx_count": 8,
+            "tx_count": 2,
             "chunks": {"RAW_000.TCB": "111", "RAW_001.TCB": "222"},
+            "truncated_tail_bytes": {"RAW_000.TCB": 0, "RAW_001.TCB": 0},
         }
-        same = {
-            "logical_record_sha256": "abc",
-            "record_count": 10,
-            "chunks": {"RAW_000.TCB": "111", "RAW_001.TCB": "222"},
-        }
+        same = dict(original)
         changed = {
+            **original,
             "logical_record_sha256": "def",
-            "record_count": 10,
+            "tx_count": 3,
             "chunks": {"RAW_000.TCB": "111", "RAW_001.TCB": "999"},
         }
         self.assertEqual(validator.compare_raw_identity(original, same), [])
         failures = validator.compare_raw_identity(original, changed)
         self.assertTrue(any("logical" in item.lower() for item in failures))
+        self.assertTrue(any("TX count" in item for item in failures))
         self.assertTrue(any("RAW_001.TCB" in item for item in failures))
 
     def test_report_status_requires_platform_and_raw_pass(self) -> None:
