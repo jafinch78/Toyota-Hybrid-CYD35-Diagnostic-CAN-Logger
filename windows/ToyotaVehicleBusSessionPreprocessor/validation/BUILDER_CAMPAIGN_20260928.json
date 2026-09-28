@@ -18,8 +18,36 @@
     "transcribe": false
   },
   "builder_campaign_gate": "PASS",
-  "windows_10_1607_gate": "PENDING",
-  "firmware_authorization": "PENDING_WINDOWS_10_1607",
+  "windows_10_1607_gate": "PASS",
+  "firmware_authorization": "PASS",
+  "authorization_rule": "S0141 + S0149 + S0128 RAW/Builder gates PASS and Windows 10 1607 runtime gate PASS; Analyzer smoke is not an authorization input",
+  "latest_pertinent_builder_patch": {
+    "name": "EvidenceBuilder_v1.0.4_RC7_CanonicalDB_Patch",
+    "version": "1.0.1",
+    "zip_sha256": "bffd76926a635b69fe9d0ce2f5839b5b82264ff4794704a8db925c7118a1184a",
+    "scope": "database.py and decoding.py only; processor/tcb1/sync/broadcast orchestration unchanged",
+    "note": "Later Matcher-only patches are not additional Task 9 firmware-gate inputs"
+  },
+  "windows_10_1607_evidence": {
+    "report": "validation/WINDOWS_1607_VALIDATION.json",
+    "report_sha256": "5246090d1d05ae30514798abdf63cb0c3ca54381ebdb84540a25a536c4a446f1",
+    "log": "validation/WINDOWS_1607_VALIDATION.log",
+    "log_sha256": "9d293ee489c6c5cb0d4fb4b2d266ccb9bac1475bb5602deb562f56cf32d2839f",
+    "status": "PASS",
+    "platform": "Windows-10-10.0.14393-SP0",
+    "windows_build": 14393,
+    "python_version": "3.12.7",
+    "session_id": "S0141",
+    "source_canlog_sha256": "0034c9e165a8daff2a53473fc20177a19ba8c3d9b68dd691b73cb178dad24edd",
+    "raw_record_count": 1021568,
+    "raw_logical_record_sha256": "a9d96bfc8ec9f3ad575dac0f6c82798f9fd73793c457fa6c276b983dfd345089",
+    "raw_chunk_sha256": "824359f8d18b80d863637f7e3f41e8c26d56f1c57f9c06f23aff626efaf148ab",
+    "truncated_tail_bytes": 0,
+    "native_session_meta_sha256": "e6831d85bade4baa466fb57b18605ae8b6cab4884f0329faea22352d884eaf17",
+    "expanded_canlog_sha256": "a2368990e8983484778e5019ac05e7e7f357bf342d5ec18bfffa69a6f0a21919",
+    "failures": [],
+    "final_errorlevel": 0
+  },
   "sessions": {
     "S0141": {
       "source_canlog": "CANLOG_091826_182353.zip",
