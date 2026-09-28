@@ -38,12 +38,34 @@ class V260GeneratorTests(unittest.TestCase):
         start = self.source.index(signature)
         open_brace = self.source.index("{", start)
         depth = 0
-        for i in range(open_brace, len(self.source)):
-            if self.source[i] == "{": depth += 1
-            elif self.source[i] == "}":
+        in_string = None
+        escape = False
+        line_comment = False
+        block_comment = False
+        i = open_brace
+        while i < len(self.source):
+            c = self.source[i]
+            n = self.source[i + 1] if i + 1 < len(self.source) else ""
+            if line_comment:
+                if c == "\n": line_comment = False
+                i += 1; continue
+            if block_comment:
+                if c == "*" and n == "/": block_comment = False; i += 2; continue
+                i += 1; continue
+            if in_string:
+                if escape: escape = False
+                elif c == "\\": escape = True
+                elif c == in_string: in_string = None
+                i += 1; continue
+            if c == "/" and n == "/": line_comment = True; i += 2; continue
+            if c == "/" and n == "*": block_comment = True; i += 2; continue
+            if c in ('"', "'"): in_string = c; i += 1; continue
+            if c == "{": depth += 1
+            elif c == "}":
                 depth -= 1
                 if depth == 0:
                     return self.source[open_brace + 1:i]
+            i += 1
         self.fail(f"unterminated function {signature}")
 
     def test_exact_capture_contract_is_preserved(self):
@@ -75,10 +97,11 @@ class V260GeneratorTests(unittest.TestCase):
             "File syncFile;", "File externalDiagnosticFile;", "DECODED.CSV",
             "DIAGNOSTICS.CSV", "EXTERNAL_DIAGNOSTICS.CSV", "EVENTS.CSV",
             "SYNC.CSV", "SIGNALS.CSV", "README.TXT", "MANIFEST.JSON",
-            "CHECKPOINT.JSON", "PLOT.CSV", "SESSION.OPEN",
+            "CHECKPOINT.JSON", "PLOT.CSV",
         ):
             self.assertNotIn(forbidden, self.source)
         self.assertIn('"SESSION.META"', self.source)
+        self.assertNotIn("SESSION.OPEN", self.function_body("bool startLogging()"))
         self.assertRegex(self.source, r"SD_MAX_OPEN_FILES\s*=\s*5")
 
     def test_tvm1_contract_constants_exist(self):
@@ -124,6 +147,7 @@ class V260GeneratorTests(unittest.TestCase):
         self.assertLess(self.source.index("BLEDevice::deinit(true);", shutdown), ap)
         self.assertIn("ESP.restart();", self.source)
         self.assertIn("isNativeTvm1SessionClean", self.source)
+        self.assertIn("SESSION.OPEN", self.source)  # legacy sessions remain supported
 
 
 if __name__ == "__main__":
