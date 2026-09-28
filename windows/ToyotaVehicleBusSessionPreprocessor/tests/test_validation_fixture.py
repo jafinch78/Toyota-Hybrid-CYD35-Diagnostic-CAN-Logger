@@ -111,10 +111,11 @@ class ValidationFixtureTests(unittest.TestCase):
             expanded_manifest = json.loads(
                 (expanded.legacy_session_dir / "MANIFEST.JSON").read_text(encoding="utf-8")
             )
+            session_open_exists = (expanded.legacy_session_dir / "SESSION.OPEN").exists()
 
         self.assertFalse(synthesis_report["closed_cleanly"])
         self.assertFalse(expanded_manifest["closed_cleanly"])
-        self.assertTrue((expanded.legacy_session_dir / "SESSION.OPEN").exists())
+        self.assertTrue(session_open_exists)
 
 
 if __name__ == "__main__":
