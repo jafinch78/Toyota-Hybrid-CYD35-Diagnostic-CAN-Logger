@@ -28,3 +28,11 @@ jobs:
         run: |
           python -m pip install --force-reinstall (Get-ChildItem dist\*.whl | Select-Object -First 1).FullName
           toyota-session-preprocess --help
+      - name: Upload tested preprocessor artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-session-preprocessor-tested
+          path: |
+            windows/ToyotaVehicleBusSessionPreprocessor/dist/*.whl
+            windows/ToyotaVehicleBusSessionPreprocessor/scripts/validate_real_sessions.py
+          if-no-files-found: error
