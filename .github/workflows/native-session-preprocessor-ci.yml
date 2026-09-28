@@ -28,13 +28,17 @@ jobs:
         run: |
           python -m pip install --force-reinstall (Get-ChildItem dist\*.whl | Select-Object -First 1).FullName
           toyota-session-preprocess --help
-      - name: Upload tested preprocessor artifact
+      - name: Upload tested preprocessor and Windows 1607 validation kit
         uses: actions/upload-artifact@v4
         with:
           name: native-session-preprocessor-tested
           path: |
             windows/ToyotaVehicleBusSessionPreprocessor/dist/*.whl
             windows/ToyotaVehicleBusSessionPreprocessor/scripts/validate_real_sessions.py
+            windows/ToyotaVehicleBusSessionPreprocessor/scripts/validate_windows_1607.py
+            windows/ToyotaVehicleBusSessionPreprocessor/RUN_WINDOWS_1607_VALIDATION.bat
+            windows/ToyotaVehicleBusSessionPreprocessor/VALIDATION.md
+            windows/ToyotaVehicleBusSessionPreprocessor/validation/BUILDER_CAMPAIGN_20260928.json
           if-no-files-found: error
       - name: Checkout exact Evidence Builder 1.0.4 oracle
         uses: actions/checkout@v4
