@@ -38,11 +38,7 @@ def _fmt(value: float | int | None, digits: int = 2) -> str:
 
 
 class LegacyDecodedProjector:
-    """Reproduce the useful legacy live-signal projection from authoritative RAW.
-
-    This intentionally implements only formulas that were already present in the logger or
-    explicitly frozen by the native-capture tests. It does not infer new CAN definitions.
-    """
+    """Reproduce the useful legacy live-signal projection from authoritative RAW."""
 
     def __init__(self, profile: str, confidence: int) -> None:
         self.profile = profile
@@ -50,6 +46,7 @@ class LegacyDecodedProjector:
         self.values: dict[str, float | int | str] = {}
         self.passive_times: dict[str, int] = {}
         self.diag_seen = False
+        self.ce_seen = False
 
     def _set(self, key: str, value: float | int | str) -> None:
         self.values[key] = value
@@ -63,16 +60,18 @@ class LegacyDecodedProjector:
                 amps = raw_current * 0.1
                 volts = float(_word_be(data, 2))
                 if -500.0 <= amps <= 500.0 and 100.0 <= volts <= 400.0:
-                    self._set("Pack_A", amps)
-                    self._set("Pack_V", volts)
-                    self._set("Pack_kW", volts * amps / 1000.0)
+                    if not self.ce_seen:
+                        self._set("Pack_A", amps)
+                        self._set("Pack_V", volts)
+                        self._set("Pack_kW", volts * amps / 1000.0)
                     self.passive_times["electrical"] = time_us
             elif can_id == 0x3CB and len(data) == 7:
                 soc = data[3] * 0.5
                 t1 = data[4]
                 t2 = data[5]
                 if 0.0 <= soc <= 100.0 and t1 <= 100 and t2 <= 100:
-                    self._set("SOC_pct", soc)
+                    if not self.ce_seen:
+                        self._set("SOC_pct", soc)
                     self._set("HV_T1_F", t1 * 1.8 + 32.0)
                     self._set("HV_T2_F", t2 * 1.8 + 32.0)
                     self._set("HV_Avg_F", (t1 + t2) * 0.9 + 32.0)
@@ -98,7 +97,6 @@ class LegacyDecodedProjector:
         if service is None or not payload:
             return
         data = payload[2:] if pid is not None and len(payload) >= 2 else payload[1:]
-
         if service == 0x01 and pid is not None:
             if pid == 0x0C and len(data) >= 2:
                 self._set("Engine_RPM", _word_be(data, 0) // 4)
@@ -111,7 +109,6 @@ class LegacyDecodedProjector:
                 self._set("Catalyst_B1S1_F", c * 1.8 + 32.0)
             self.diag_seen = True
             return
-
         if service != 0x21 or pid is None:
             return
         if self.profile == "PRIUS GEN 2":
@@ -122,12 +119,13 @@ class LegacyDecodedProjector:
     def _observe_gen2_21(self, pid: int, d: bytes) -> None:
         if pid == 0xC3 and len(d) >= 28:
             self._set("Engine_RPM", _word_be(d, 14))
-            self._set("SOC_pct", 0.392 * d[18])
+            if not self.ce_seen:
+                self._set("SOC_pct", 0.392 * d[18])
             self._set("MG1_Inv_F", 1.8 * d[24] - 58.0)
             self._set("MG2_Inv_F", 1.8 * d[25] - 58.0)
             self._set("MG1_Temp_F", 1.8 * d[26] - 58.0)
             self._set("MG2_Temp_F", 1.8 * d[27] - 58.0)
-            if len(d) >= 31:
+            if len(d) >= 31 and not self.ce_seen:
                 volts = 2.0 * d[28]
                 amps = 2.0 * d[30] - 256.0
                 self._set("Pack_V", volts)
@@ -138,6 +136,7 @@ class LegacyDecodedProjector:
             self._set("Converter_Temp_F", 1.8 * d[5] - 58.0)
             self.diag_seen = True
         elif pid == 0xCE and len(d) >= 31:
+            self.ce_seen = True
             self._set("SOC_pct", 0.5 * d[0])
             amps = 2.56 * d[1] + 0.01 * d[2] - 327.68
             blocks = []
@@ -209,7 +208,6 @@ class LegacyDecodedProjector:
             if not passive_electrical_fresh:
                 for key in ("Pack_A", "Pack_V", "Pack_kW"):
                     values.pop(key, None)
-
         result = {key: "" for key in LEGACY_DECODED_HEADER}
         result["Time_ms"] = str(int(time_us // 1000))
         result["Profile"] = self.profile
@@ -274,7 +272,6 @@ def write_legacy_decoded(session: object, path: Path) -> int:
         with Path(path).open("w", newline="", encoding="utf-8") as handle:
             csv.DictWriter(handle, fieldnames=LEGACY_DECODED_HEADER, lineterminator="\n").writeheader()
         return 0
-
     profile, confidence = _profile_from_meta(session)
     projector = LegacyDecodedProjector(profile, confidence)
     transactions = _merge_transactions(session)
@@ -285,7 +282,6 @@ def write_legacy_decoded(session: object, path: Path) -> int:
     last = session.can_stream.last_time_us
     sample = ((first + 99_999) // 100_000) * 100_000
     rows = 0
-
     with Path(path).open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=LEGACY_DECODED_HEADER, lineterminator="\n")
         writer.writeheader()
