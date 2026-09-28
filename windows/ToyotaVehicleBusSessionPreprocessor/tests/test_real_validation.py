@@ -42,13 +42,17 @@ class RealValidationGateTests(unittest.TestCase):
             write_tcb(root / "RAW_001.TCB", [3])
             snapshot = validator.raw_snapshot(root)
             expected = scan_tcb_stream([root / "RAW_000.TCB", root / "RAW_001.TCB"])
+            first_chunk_bytes = HEADER + b"".join(
+                REC.pack(t, 0x123, b"\x01" + b"\0" * 7, 1, 0, 0, 0)
+                for t in [1, 2]
+            )
         self.assertEqual(snapshot["record_count"], 3)
         self.assertEqual(snapshot["logical_record_sha256"], expected.logical_record_sha256)
         self.assertEqual([item["name"] for item in snapshot["chunks"]], ["RAW_000.TCB", "RAW_001.TCB"])
-        self.assertEqual(snapshot["chunks"][0]["sha256"],
-                         hashlib.sha256((HEADER + b"".join(
-                             REC.pack(t, 0x123, b"\x01" + b"\0" * 7, 1, 0, 0, 0)
-                             for t in [1, 2])).hexdigest())
+        self.assertEqual(
+            snapshot["chunks"][0]["sha256"],
+            hashlib.sha256(first_chunk_bytes).hexdigest(),
+        )
 
     def test_compare_raw_snapshots_blocks_record_or_hash_change(self) -> None:
         validator = load_validator()
