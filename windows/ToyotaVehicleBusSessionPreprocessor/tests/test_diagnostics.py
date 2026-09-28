@@ -7,6 +7,7 @@ import unittest
 from toyota_vehicle_bus_session.diagnostics import (
     build_diagnostic_summary,
     classify_external_diagnostic_frames,
+    reconstruct_external_transactions,
     reconstruct_logger_diagnostics,
     write_external_diagnostics,
     write_legacy_diagnostics,
@@ -89,6 +90,48 @@ class DiagnosticTests(unittest.TestCase):
             frame(5_000_101, 0x7E8, [3, 0x41, 0, 0]),
         ])
         self.assertEqual([item.classification for item in expired], ["EXTERNAL_REQUEST"])
+
+    def test_external_transactions_pair_single_frame_and_report_no_response(self):
+        transactions = reconstruct_external_transactions([
+            frame(100, 0x7E0, [2, 1, 0x0C]),
+            frame(150, 0x7E8, [4, 0x41, 0x0C, 0x12, 0x34]),
+            frame(300, 0x7E3, [2, 0x21, 0xCE]),
+        ])
+        self.assertEqual(len(transactions), 2)
+        first, second = transactions
+        self.assertEqual((first.request_id, first.response_id, first.service, first.pid), (0x7E0, 0x7E8, 1, 0x0C))
+        self.assertEqual(first.status, "OK")
+        self.assertEqual(first.payload, bytes([0x41, 0x0C, 0x12, 0x34]))
+        self.assertEqual(first.frame_count, 1)
+        self.assertEqual(second.status, "NO_RESPONSE")
+        self.assertEqual((second.request_id, second.service, second.pid), (0x7E3, 0x21, 0xCE))
+
+    def test_external_transactions_reassemble_multiframe_and_expose_sequence_gap(self):
+        ok = reconstruct_external_transactions([
+            frame(100, 0x7E2, [2, 0x21, 0xC3]),
+            frame(150, 0x7EA, [0x10, 9, 0x61, 0xC3, 1, 2, 3, 4]),
+            frame(170, 0x7EA, [0x21, 5, 6, 7, 8, 9, 0, 0]),
+        ])[0]
+        self.assertEqual(ok.status, "OK")
+        self.assertEqual(ok.payload, bytes([0x61, 0xC3, 1, 2, 3, 4, 5, 6, 7]))
+        self.assertEqual(ok.frame_count, 2)
+
+        incomplete = reconstruct_external_transactions([
+            frame(100, 0x7E2, [2, 0x21, 0xC3]),
+            frame(150, 0x7EA, [0x10, 12, 0x61, 0xC3, 1, 2, 3, 4]),
+            frame(170, 0x7EA, [0x22, 5, 6, 7, 8, 9, 10, 11]),
+        ])[0]
+        self.assertEqual(incomplete.status, "INCOMPLETE_SEQUENCE")
+        self.assertGreater(incomplete.missing_sequences, 0)
+
+    def test_external_transactions_report_unmatched_response(self):
+        transaction = reconstruct_external_transactions([
+            frame(100, 0x7E0, [2, 1, 0x05]),
+            frame(120, 0x7E8, [4, 0x41, 0x0C, 0x12, 0x34]),
+        ])[0]
+        self.assertEqual(transaction.status, "UNMATCHED_RESPONSE")
+        self.assertIsNone(transaction.request_id)
+        self.assertEqual(transaction.response_id, 0x7E8)
 
     def test_logger_owned_response_is_not_mislabeled_during_external_hold(self):
         external = classify_external_diagnostic_frames([
