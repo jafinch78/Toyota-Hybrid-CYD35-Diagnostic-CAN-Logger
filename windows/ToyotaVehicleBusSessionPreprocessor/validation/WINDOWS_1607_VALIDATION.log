@@ -1,0 +1,29 @@
+============================================================
+Toyota Vehicle Bus Session Preprocessor - Windows 10 1607 Validation
+============================================================
+Working directory: C:\Users\USB3.0\Downloads\native-session-preprocessor-tested-win1607
+Started: Mon 09/28/2026  1:44:30.35
+
+Microsoft Windows [Version 10.0.14393]
+Source CANLOG: C:\Users\USB3.0\Downloads\native-session-preprocessor-tested-win1607\CANLOG_091826_182353.zip
+Local .venv not found; attempting creation with Python launcher.
+C:\Windows\py.exe
+No suitable Python runtime found
+Pass --list (-0) to see all detected environments on your machine
+or set environment variable PYLAUNCHER_ALLOW_INSTALL to use winget
+or open the Microsoft Store to the requested version.
+Python 3.12.7
+Wheel: C:\Users\USB3.0\Downloads\native-session-preprocessor-tested-win1607\dist\toyota_vehicle_bus_session_preprocessor-0.1.0-py3-none-any.whl
+Processing c:\users\usb3.0\downloads\native-session-preprocessor-tested-win1607\dist\toyota_vehicle_bus_session_preprocessor-0.1.0-py3-none-any.whl
+Installing collected packages: toyota-vehicle-bus-session-preprocessor
+Successfully installed toyota-vehicle-bus-session-preprocessor-0.1.0
+{
+  "final_errorlevel": 0,
+  "raw_record_count": 1021568,
+  "report": "C:\\Users\\USB3.0\\Downloads\\native-session-preprocessor-tested-win1607\\validation\\win1607_runtime\\WINDOWS_1607_VALIDATION.json",
+  "rx_count": 1021568,
+  "status": "PASS",
+  "tx_count": 0,
+  "windows_build": 14393
+}
+Final ERRORLEVEL = 0
