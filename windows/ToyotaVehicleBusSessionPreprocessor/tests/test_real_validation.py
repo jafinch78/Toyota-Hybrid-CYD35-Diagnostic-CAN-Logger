@@ -73,21 +73,22 @@ class RealValidationGateTests(unittest.TestCase):
         validator = load_validator()
         result = validator.final_gate_status(
             case_reports=[{"raw_gate": "PASS", "builder_gate": "NOT_RUN"}],
-            analyzer_smoke="NOT_RUN",
             windows_1607="NOT_RUN",
         )
         self.assertEqual(result, "FAIL")
 
-    def test_gate_pass_requires_every_required_stage(self) -> None:
+    def test_gate_pass_requires_every_builder_case_and_windows_1607(self) -> None:
         validator = load_validator()
         cases = [
             {"raw_gate": "PASS", "builder_gate": "PASS"},
             {"raw_gate": "PASS", "builder_gate": "PASS"},
             {"raw_gate": "PASS", "builder_gate": "PASS"},
         ]
-        self.assertEqual(validator.final_gate_status(cases, "PASS", "PASS"), "PASS")
+        self.assertEqual(validator.final_gate_status(cases, "PASS"), "PASS")
         cases[1]["builder_gate"] = "FAIL"
-        self.assertEqual(validator.final_gate_status(cases, "PASS", "PASS"), "FAIL")
+        self.assertEqual(validator.final_gate_status(cases, "PASS"), "FAIL")
+        cases[1]["builder_gate"] = "PASS"
+        self.assertEqual(validator.final_gate_status(cases, "NOT_RUN"), "FAIL")
 
 
 if __name__ == "__main__":
