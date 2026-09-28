@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-GENERATOR = ROOT / "tools" / "generate_v2_6_0_firmware.py"
+GENERATOR = ROOT / "tools" / "build_v2_6_0_firmware.py"
 RC2_DIR = ROOT / ".ci_rc2" / "firmware" / "Toyota_Hybrid_CYD35_Diagnostic_CAN_Logger_v2_5_0"
 
 
