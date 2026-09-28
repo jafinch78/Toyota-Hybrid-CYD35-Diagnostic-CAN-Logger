@@ -7,11 +7,11 @@ import unittest
 from toyota_vehicle_bus_session.diagnostics import (
     build_diagnostic_summary,
     classify_external_diagnostic_frames,
-    reconstruct_external_transactions,
     reconstruct_logger_diagnostics,
     write_external_diagnostics,
     write_legacy_diagnostics,
 )
+from toyota_vehicle_bus_session.external_transactions import reconstruct_external_transactions
 from toyota_vehicle_bus_session.meta import MetaHeader, MetaReadResult, MetaRecovery, MetaRecord
 from toyota_vehicle_bus_session.tcb1 import TcbFrame
 
@@ -125,13 +125,14 @@ class DiagnosticTests(unittest.TestCase):
         self.assertGreater(incomplete.missing_sequences, 0)
 
     def test_external_transactions_report_unmatched_response(self):
-        transaction = reconstruct_external_transactions([
+        transactions = reconstruct_external_transactions([
             frame(100, 0x7E0, [2, 1, 0x05]),
             frame(120, 0x7E8, [4, 0x41, 0x0C, 0x12, 0x34]),
-        ])[0]
-        self.assertEqual(transaction.status, "UNMATCHED_RESPONSE")
-        self.assertIsNone(transaction.request_id)
-        self.assertEqual(transaction.response_id, 0x7E8)
+        ])
+        unmatched = next(item for item in transactions if item.status == "UNMATCHED_RESPONSE")
+        self.assertIsNone(unmatched.request_id)
+        self.assertEqual(unmatched.response_id, 0x7E8)
+        self.assertTrue(any(item.status == "NO_RESPONSE" for item in transactions))
 
     def test_logger_owned_response_is_not_mislabeled_during_external_hold(self):
         external = classify_external_diagnostic_frames([
