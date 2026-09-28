@@ -1,0 +1,25 @@
+name: v2.6 Simplified Firmware Package CI
+
+on:
+  push:
+    branches:
+      - feature/logger-simplified-capture-v2.6
+  workflow_dispatch:
+
+jobs:
+  generator-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Stage immutable RC2 source fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .ci_rc2/firmware
+          cp -a firmware/Toyota_Hybrid_CYD35_Diagnostic_CAN_Logger_v2_5_0 .ci_rc2/firmware/
+          test "$(git hash-object .ci_rc2/firmware/Toyota_Hybrid_CYD35_Diagnostic_CAN_Logger_v2_5_0/Toyota_Hybrid_CYD35_Diagnostic_CAN_Logger_v2_5_0.ino)" = "bbc7421da2bfc684324123b3232895cdcfd6c23d"
+      - name: Run RED-GREEN generator contract
+        run: python -m unittest firmware.tests.test_v2_6_0_generator -v
