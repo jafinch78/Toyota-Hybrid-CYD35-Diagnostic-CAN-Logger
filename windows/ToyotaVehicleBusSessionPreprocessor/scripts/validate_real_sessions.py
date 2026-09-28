@@ -212,13 +212,29 @@ def _validate_one_case(case: ValidationCase, output_root: Path,
     return report
 
 
+REQUIRED_BUILDER_SESSIONS = ("S0141", "S0149", "S0128")
+
+
 def final_gate_status(case_reports: list[dict[str, Any]], windows_1607: str) -> str:
-    if not case_reports:
-        return "FAIL"
-    if any(item.get("raw_gate") != "PASS" or item.get("builder_gate") != "PASS"
-           for item in case_reports):
-        return "FAIL"
     if windows_1607 != "PASS":
+        return "FAIL"
+    if len(case_reports) != len(REQUIRED_BUILDER_SESSIONS):
+        return "FAIL"
+
+    reports_by_session: dict[str, dict[str, Any]] = {}
+    for item in case_reports:
+        session_id = str(item.get("session_id", "")).upper()
+        if session_id not in REQUIRED_BUILDER_SESSIONS or session_id in reports_by_session:
+            return "FAIL"
+        reports_by_session[session_id] = item
+
+    if set(reports_by_session) != set(REQUIRED_BUILDER_SESSIONS):
+        return "FAIL"
+    if any(
+        reports_by_session[session_id].get("raw_gate") != "PASS"
+        or reports_by_session[session_id].get("builder_gate") != "PASS"
+        for session_id in REQUIRED_BUILDER_SESSIONS
+    ):
         return "FAIL"
     return "PASS"
 
@@ -303,6 +319,7 @@ def main(argv: list[str] | None = None) -> int:
     result = {
         "format": "TVM1_OFFLINE_EXPANDER_VALIDATION",
         "version": 1,
+        "required_builder_sessions": list(REQUIRED_BUILDER_SESSIONS),
         "cases": case_reports,
         "windows_10_1607": windows_status,
         "windows_10_1607_evidence": windows_evidence,
