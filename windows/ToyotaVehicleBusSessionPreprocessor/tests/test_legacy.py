@@ -35,9 +35,9 @@ def make(root, clean=True):
         MetaRecord(0x30, 1, 0, 6, 210, struct.pack("<HBBHHq", 6, 1, 1, 3, 0, 0x7E0)),
     ]
     if clean:
-        records.append(MetaRecord(0xFE, 0, 0, 7, 300, struct.pack("<HBBHH", 0, 1, 0, 1, 0)))
+        records.append(MetaRecord(0xFE, 0, 0, 7, 300000, struct.pack("<HBBHH", 0, 1, 0, 1, 0)))
     write_meta(root / "SESSION.META", MetaHeader(1, 0, 166, 0, 10), records)
-    (root / "RAW_000.TCB").write_bytes(HEADER + rec(100, 0x100, 0) + rec(250, 0x7E0, 1))
+    (root / "RAW_000.TCB").write_bytes(HEADER + rec(100000, 0x100, 0) + rec(250000, 0x7E0, 1))
     return root
 
 
@@ -50,7 +50,7 @@ class LegacyTests(unittest.TestCase):
             checkpoint = build_legacy_checkpoint(session)
             self.assertEqual((manifest["format"], manifest["format_version"], manifest["raw_format"]), ("ToyotaHybridCAN-Capture", "1.4", "TCB1_24_byte_records"))
             self.assertEqual((manifest["firmware"], manifest["firmware_version"], manifest["board_profile"]), ("Toyota_Hybrid_CYD35_Diagnostic_CAN_Logger", "2.6.0", "E32R35T_TOUCH"))
-            self.assertEqual((manifest["first_can_time_us"], manifest["last_can_time_us"]), (100, 250))
+            self.assertEqual((manifest["first_can_time_us"], manifest["last_can_time_us"]), (100000, 250000))
             self.assertEqual((manifest["rx_records"], manifest["tx_records"], manifest["persisted_records"], manifest["queue_drops"]), (2, 1, 3, 4))
             self.assertEqual(manifest["native_capture_format"], "TVM1")
             self.assertEqual(manifest["native_capture_version"], "1.0")
