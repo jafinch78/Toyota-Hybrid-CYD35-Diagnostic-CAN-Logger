@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 import struct
+import sys
 import tempfile
 import unittest
 
@@ -20,6 +21,7 @@ def load_validator():
     if spec is None or spec.loader is None:
         raise RuntimeError("unable to load validation script")
     module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module
 
