@@ -35,44 +35,23 @@ def _find_function_definition(text: str, signature: str) -> tuple[int, int, int]
             c = text[i]
             n = text[i + 1] if i + 1 < len(text) else ""
             if line_comment:
-                if c == "\n":
-                    line_comment = False
-                i += 1
-                continue
+                if c == "\n": line_comment = False
+                i += 1; continue
             if block_comment:
-                if c == "*" and n == "/":
-                    block_comment = False
-                    i += 2
-                    continue
-                i += 1
-                continue
+                if c == "*" and n == "/": block_comment = False; i += 2; continue
+                i += 1; continue
             if in_string is not None:
-                if escape:
-                    escape = False
-                elif c == "\\":
-                    escape = True
-                elif c == in_string:
-                    in_string = None
-                i += 1
-                continue
-            if c == "/" and n == "/":
-                line_comment = True
-                i += 2
-                continue
-            if c == "/" and n == "*":
-                block_comment = True
-                i += 2
-                continue
-            if c in ('"', "'"):
-                in_string = c
-                i += 1
-                continue
-            if c == "{":
-                depth += 1
+                if escape: escape = False
+                elif c == "\\": escape = True
+                elif c == in_string: in_string = None
+                i += 1; continue
+            if c == "/" and n == "/": line_comment = True; i += 2; continue
+            if c == "/" and n == "*": block_comment = True; i += 2; continue
+            if c in ('"', "'"): in_string = c; i += 1; continue
+            if c == "{": depth += 1
             elif c == "}":
                 depth -= 1
-                if depth == 0:
-                    return start, brace, i + 1
+                if depth == 0: return start, brace, i + 1
             i += 1
         raise ValueError(f"unterminated function definition: {signature}")
 
@@ -88,7 +67,19 @@ def _transform_source(source: str) -> str:
     # copied into the E32R35T profile.
     source = source.replace("E32N35T", "E32R35T")
     source = source.replace("labelled PROBABLE in SIGNALS.CSV", "labelled PROBABLE in the offline signal registry")
-    return _original_transform(source)
+    transformed = _original_transform(source)
+
+    # Arduino's automatic prototype generation does not reliably infer this
+    # helper after the generated TVM1 code insertion. Make the ordering explicit.
+    marker = "void finalizePendingStop() {"
+    declaration = (
+        "bool appendMetaDirect(uint16_t recordType, uint8_t streamId, uint8_t flags, "
+        "uint64_t timeUs, const uint8_t *payload, uint16_t payloadLen);\n\n"
+    )
+    if marker not in transformed:
+        raise ValueError("finalizePendingStop definition missing")
+    transformed = transformed.replace(marker, declaration + marker, 1)
+    return transformed
 
 
 _base._transform_source = _transform_source
