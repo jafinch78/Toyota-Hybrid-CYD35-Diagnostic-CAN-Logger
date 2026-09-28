@@ -6,6 +6,7 @@ from pathlib import Path
 import shutil
 import zipfile
 
+from .derived import write_legacy_decoded
 from .diagnostics import (
     build_diagnostic_summary,
     classify_external_diagnostic_frames,
@@ -66,6 +67,7 @@ def expand_native_session(source: Path, output_parent: Path, *, options: Expansi
         diagnostic_summary = build_diagnostic_summary(
             iter_tcb_frames(session.can_paths), logger_transactions, external_frames, session.meta
         )
+        decoded_rows = write_legacy_decoded(session, legacy_dir / "DECODED.CSV")
 
         (legacy_dir / "README.TXT").write_text(
             "Offline-expanded Toyota vehicle-bus session. RAW TCB bytes are authoritative and were copied byte-for-byte. Generated compatibility text products carry TVM1 provenance.\n",
@@ -84,9 +86,14 @@ def expand_native_session(source: Path, output_parent: Path, *, options: Expansi
                 "EVENTS.CSV": "GENERATED_COMPATIBILITY",
                 "DIAGNOSTICS.CSV": "GENERATED_RECONSTRUCTED_FROM_RAW_META",
                 "EXTERNAL_DIAGNOSTICS.CSV": "GENERATED_RECONSTRUCTED_FROM_RAW",
-                "DECODED.CSV": "NOT_GENERATED_DERIVED",
+                "DECODED.CSV": "GENERATED_DERIVED_FROM_RAW_META",
                 "SIGNALS.CSV": "NOT_GENERATED_DERIVED",
                 "PLOT.CSV": "NOT_GENERATED_DERIVED",
+            },
+            "decoded_projection": {
+                "rows": decoded_rows,
+                "source": "RAW_TCB1_PLUS_TVM1",
+                "algorithm": "legacy_live_projection_v1",
             },
             "diagnostic_reconstruction": diagnostic_summary,
             "raw_files": [
