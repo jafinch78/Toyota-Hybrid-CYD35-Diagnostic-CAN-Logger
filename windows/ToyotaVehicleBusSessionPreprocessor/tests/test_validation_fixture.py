@@ -31,6 +31,9 @@ class ValidationFixtureTests(unittest.TestCase):
             "firmware_version": "2.5",
             "board_profile": "E32R35T_TOUCH",
             "runtime_database": "db",
+            "vehicle_profile": "PRIUS GEN 2",
+            "profile_confidence_pct": 85,
+            "vehicle_model_code": "NHW20",
             "closed_cleanly": True,
         }), encoding="utf-8")
         (session / "CHECKPOINT.JSON").write_text(json.dumps({
@@ -74,6 +77,20 @@ class ValidationFixtureTests(unittest.TestCase):
             warning["code"] == "VALIDATION_FIXTURE_LOSSY_EVENT_DETAIL"
             for warning in synthesis_report["warnings"]
         ))
+
+    def test_vehicle_profile_provenance_round_trips_through_tvm1(self):
+        with tempfile.TemporaryDirectory() as td:
+            base = pathlib.Path(td)
+            legacy = self.make_legacy(base / "legacy")
+            native = synthesize_native_fixture(legacy, base / "native")
+            expanded = expand_native_session(native.native_session_dir, base / "expanded")
+            expanded_manifest = json.loads(
+                (expanded.legacy_session_dir / "MANIFEST.JSON").read_text(encoding="utf-8")
+            )
+
+        self.assertEqual(expanded_manifest["vehicle_profile"], "PRIUS GEN 2")
+        self.assertEqual(expanded_manifest["profile_confidence_pct"], 85)
+        self.assertEqual(expanded_manifest["vehicle_model_code"], "NHW20")
 
     def test_zip_input_with_nested_canlog_session_is_supported(self):
         with tempfile.TemporaryDirectory() as td:
