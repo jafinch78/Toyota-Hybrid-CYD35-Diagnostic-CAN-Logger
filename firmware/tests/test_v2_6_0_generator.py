@@ -35,8 +35,20 @@ class V260GeneratorTests(unittest.TestCase):
             cls.temp.cleanup()
 
     def function_body(self, signature: str) -> str:
-        start = self.source.index(signature)
-        open_brace = self.source.index("{", start)
+        search_from = 0
+        while True:
+            start = self.source.find(signature, search_from)
+            if start < 0:
+                self.fail(f"function not found: {signature}")
+            open_brace = self.source.find("{", start)
+            semicolon = self.source.find(";", start)
+            if open_brace < 0:
+                self.fail(f"opening brace not found: {signature}")
+            if 0 <= semicolon < open_brace:
+                search_from = semicolon + 1
+                continue
+            break
+
         depth = 0
         in_string = None
         escape = False
@@ -47,20 +59,40 @@ class V260GeneratorTests(unittest.TestCase):
             c = self.source[i]
             n = self.source[i + 1] if i + 1 < len(self.source) else ""
             if line_comment:
-                if c == "\n": line_comment = False
-                i += 1; continue
+                if c == "\n":
+                    line_comment = False
+                i += 1
+                continue
             if block_comment:
-                if c == "*" and n == "/": block_comment = False; i += 2; continue
-                i += 1; continue
+                if c == "*" and n == "/":
+                    block_comment = False
+                    i += 2
+                    continue
+                i += 1
+                continue
             if in_string:
-                if escape: escape = False
-                elif c == "\\": escape = True
-                elif c == in_string: in_string = None
-                i += 1; continue
-            if c == "/" and n == "/": line_comment = True; i += 2; continue
-            if c == "/" and n == "*": block_comment = True; i += 2; continue
-            if c in ('"', "'"): in_string = c; i += 1; continue
-            if c == "{": depth += 1
+                if escape:
+                    escape = False
+                elif c == "\\":
+                    escape = True
+                elif c == in_string:
+                    in_string = None
+                i += 1
+                continue
+            if c == "/" and n == "/":
+                line_comment = True
+                i += 2
+                continue
+            if c == "/" and n == "*":
+                block_comment = True
+                i += 2
+                continue
+            if c in ('"', "'"):
+                in_string = c
+                i += 1
+                continue
+            if c == "{":
+                depth += 1
             elif c == "}":
                 depth -= 1
                 if depth == 0:
@@ -80,7 +112,7 @@ class V260GeneratorTests(unittest.TestCase):
         self.assertIn("E32R35T_TOUCH", self.source)
         self.assertIn("DORHEA_B0DLNJSSFW_TOUCH", self.source)
         self.assertNotIn("E32N35T", self.source)
-        self.assertIn("#define SPI_FREQUENCY  80000000", self.setup_h)
+        self.assertRegex(self.setup_h, r"#define\s+SPI_FREQUENCY\s+80000000")
 
     def test_read_only_diagnostic_whitelist_is_unchanged(self):
         table = self.source.split("const DiagnosticRequest DIAGNOSTIC_REQUESTS[]", 1)[1].split("// ------------------------------- Global state", 1)[0]
