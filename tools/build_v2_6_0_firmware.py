@@ -83,9 +83,13 @@ _original_transform = _base._transform_source
 
 
 def _transform_source(source: str) -> str:
-    # Remove only the obsolete active-target name before the canonical board block
-    # is installed. This does not copy its calibration into E32R35T.
+    # Remove only obsolete source-language before the canonical board/session
+    # transformation. This does not alter runtime capture behavior.
     source = source.replace("E32N35T", "E32R35T")
+    source = source.replace(
+        "They are intentionally profile-gated and labelled PROBABLE in SIGNALS.CSV.",
+        "They are intentionally profile-gated and labelled PROBABLE in the offline signal registry.",
+    )
     return _original_transform(source)
 
 
