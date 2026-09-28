@@ -5,7 +5,15 @@ import hashlib
 from pathlib import Path
 
 from .meta import decode_record_payload
-from .schemas import EVENTS_HEADER, EVENT_NAMES, SEVERITY_NAMES, SOURCE_NAMES, SYNC_HEADER
+from .schemas import (
+    EVENTS_HEADER,
+    EVENT_NAMES,
+    PROFILE_LABELS,
+    PROFILE_MODEL_CODES,
+    SEVERITY_NAMES,
+    SOURCE_NAMES,
+    SYNC_HEADER,
+)
 
 PREPROCESSOR_NAME = "ToyotaVehicleBusSessionPreprocessor"
 PREPROCESSOR_VERSION = "0.1.0"
@@ -25,6 +33,23 @@ def _last_record(session, record_type: int, stream_id: int | None = None):
     return {}
 
 
+def _profile_state(session) -> tuple[int | None, int | None]:
+    profile: int | None = None
+    confidence: int | None = None
+    for record in session.meta.records:
+        if record.record_type != 0x0030:
+            continue
+        decoded = decode_record_payload(record)
+        if decoded.get("event_code") not in (17, 18):
+            continue
+        args = {int(arg_id): int(value) for arg_id, _flags, value in decoded.get("args", ())}
+        if 5 in args:
+            profile = args[5]
+        if 6 in args:
+            confidence = args[6]
+    return profile, confidence
+
+
 def _meta_sha256(session) -> str:
     return hashlib.sha256((session.source_root / "SESSION.META").read_bytes()).hexdigest()
 
@@ -32,8 +57,9 @@ def _meta_sha256(session) -> str:
 def build_legacy_manifest(session) -> dict[str, object]:
     start = _session_start(session)
     counters = _last_record(session, 0x0021, 1)
+    profile, confidence = _profile_state(session)
     can = session.can_stream
-    return {
+    manifest: dict[str, object] = {
         "format": "ToyotaHybridCAN-Capture",
         "format_version": "1.4",
         "firmware": start.get("logger_name"),
@@ -60,6 +86,11 @@ def build_legacy_manifest(session) -> dict[str, object]:
         "preprocessor_name": PREPROCESSOR_NAME,
         "preprocessor_version": PREPROCESSOR_VERSION,
     }
+    if profile in PROFILE_LABELS:
+        manifest["vehicle_profile"] = PROFILE_LABELS[profile]
+        manifest["profile_confidence_pct"] = confidence if confidence is not None else 0
+        manifest["vehicle_model_code"] = PROFILE_MODEL_CODES.get(profile, "unresolved")
+    return manifest
 
 
 def build_legacy_checkpoint(session) -> dict[str, object]:
