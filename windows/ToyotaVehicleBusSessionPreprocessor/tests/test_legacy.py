@@ -84,7 +84,7 @@ class LegacyTests(unittest.TestCase):
             self.assertFalse(manifest["closed_cleanly"])
             self.assertTrue((result.legacy_session_dir / "SESSION.OPEN").exists())
 
-    def test_expansion_copies_raw_byte_identical_and_marks_derived_not_generated(self):
+    def test_expansion_copies_raw_and_generates_offline_decoded_compatibility_product(self):
         with tempfile.TemporaryDirectory() as td:
             src = make(pathlib.Path(td) / "src")
             raw = (src / "RAW_000.TCB").read_bytes()
@@ -93,9 +93,18 @@ class LegacyTests(unittest.TestCase):
             self.assertEqual(copied, raw)
             self.assertEqual(hashlib.sha256(copied).hexdigest(), hashlib.sha256(raw).hexdigest())
             report = json.loads(result.validation_report.read_text())
-            self.assertEqual(report["products"]["DECODED.CSV"], "NOT_GENERATED_DERIVED")
+            self.assertEqual(report["products"]["DECODED.CSV"], "GENERATED_DERIVED_FROM_RAW_META")
             self.assertEqual(report["products"]["SIGNALS.CSV"], "NOT_GENERATED_DERIVED")
             self.assertEqual(report["products"]["PLOT.CSV"], "NOT_GENERATED_DERIVED")
+            self.assertGreater(report["decoded_projection"]["rows"], 0)
+            self.assertEqual(report["decoded_projection"]["source"], "RAW_TCB1_PLUS_TVM1")
+            self.assertEqual(report["decoded_projection"]["algorithm"], "legacy_live_projection_v1")
+            decoded_path = result.legacy_session_dir / "DECODED.CSV"
+            self.assertTrue(decoded_path.is_file())
+            with decoded_path.open(newline="", encoding="utf-8") as handle:
+                rows = list(csv.reader(handle))
+            self.assertGreater(len(rows), 1)
+            self.assertEqual(rows[0][0:3], ["Time_ms", "Profile", "ProfileConfidence"])
             self.assertTrue((result.legacy_session_dir / "DIAGNOSTICS.CSV").read_text().startswith("Transaction,RequestTime_us,"))
             self.assertTrue((result.legacy_session_dir / "EXTERNAL_DIAGNOSTICS.CSV").read_text().startswith("Time_us,CAN_ID,DLC,DataHex,Classification"))
 
