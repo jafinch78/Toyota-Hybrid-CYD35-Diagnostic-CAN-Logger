@@ -1,0 +1,28 @@
+name: v2.6 RAW+TVM1 Firmware Contract
+
+on:
+  push:
+    branches:
+      - feature/logger-v2.6.0-raw-meta
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify immutable RC2 source blob
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git hash-object firmware/Toyota_Hybrid_CYD35_Diagnostic_CAN_Logger_v2_5_0/Toyota_Hybrid_CYD35_Diagnostic_CAN_Logger_v2_5_0.ino)" = "bbc7421da2bfc684324123b3232895cdcfd6c23d"
+      - name: Verify RC2 non-regression source contract
+        run: python -m unittest firmware.tests.test_v2_5_0_source -v
+      - name: Run v2.6 RED-GREEN generator contract
+        run: python -m unittest firmware.tests.test_v2_6_0_generator -v
