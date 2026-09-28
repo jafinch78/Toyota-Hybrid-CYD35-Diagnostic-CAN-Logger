@@ -4,15 +4,31 @@ Validation date: 2026-09-28
 
 ## Current gate state
 
-- Native-session preprocessor CI: **PASS** on `feature/native-session-preprocessor-impl` commit `cd4451bd8e613a420ca224367133dc71c15b84d2`.
-- Evidence Builder lineage: **1.0.4**, ref `evidence-builder-v1.0.4`.
-- Builder source/package SHA-256: `10507690da14a71370ec66cae508aeacf8955c7664d5d63fca271d0e50775fb9`.
-- Builder database: ToyotaHybridCAN **0.5.9**, SHA-256 `d91863e8f845749b9286391b6bb68cc8db0141e4366a042f53550feecc2cb446`.
+- Native-session preprocessor CI: **PASS** on the tested implementation lineage beginning at `cd4451bd8e613a420ca224367133dc71c15b84d2`; subsequent commits on `feature/native-session-preprocessor-impl` are validation/documentation checkpoints unless separately noted.
+- Evidence Builder compatibility boundary: **1.0.4**.
 - Three-session RAW + Builder compatibility campaign: **PASS (3/3)**.
-- Windows 10 1607 preprocessor/launcher validation: **PENDING**.
+- Windows 10 1607 preprocessor/launcher validation: **PASS**.
 - Analyzer RC7/RC8 smoke: **NOT REQUIRED** for this firmware compatibility boundary.
+- Firmware SD-product removal authorization: **PASS**.
 
-The machine-readable campaign record is `validation/BUILDER_CAMPAIGN_20260928.json`.
+Machine-readable evidence:
+
+- `validation/BUILDER_CAMPAIGN_20260928.json`
+- `validation/WINDOWS_1607_VALIDATION.json`
+- `validation/WINDOWS_1607_VALIDATION.log`
+
+Task 9 authorization is governed by `docs/superpowers/plans/2026-09-28-task9-builder-only-gate-amendment.md`: the three required Builder gates plus the Windows 10 1607 runtime gate are the complete firmware authorization boundary. No Analyzer smoke report is an input.
+
+## Pertinent Evidence Builder lineage
+
+The latest pertinent standalone Builder runtime patch for this boundary is `EvidenceBuilder_v1.0.4_RC7_CanonicalDB_Patch_v1.0.1`.
+
+- Patch ZIP SHA-256: `bffd76926a635b69fe9d0ce2f5839b5b82264ff4794704a8db925c7118a1184a`.
+- It replaces only `toyota_can_processor/database.py` and `toyota_can_processor/decoding.py`.
+- It intentionally leaves `processor.py`, `tcb1.py`, `sync.py`, broadcast decoding, Broadcast Discovery, OCR/media, GUI, and CAN-transmission policy unchanged.
+- Later Matcher-only patches are not additional Task 9 firmware-gate requirements.
+
+The original three-session compatibility campaign records the exact Builder/database oracle actually used for that campaign in `BUILDER_CAMPAIGN_20260928.json`. The RC7 CanonicalDB patch is documented separately because it changes database/formula compatibility, not the CANLOG input/session orchestration contract being authorized here.
 
 ## Real-session Builder campaign
 
@@ -53,23 +69,44 @@ Logical TCB record-stream SHA-256: `da889e91895cbb77319477dc10bd896bb1b9e0045b86
 
 Builder original/expanded decoded rows: **8,941 / 13,543**. The transaction count remains **2,651**; the existing `NEGATIVE_RESPONSE_12` is preserved while RAW reconstruction reduces NO_RESPONSE from 235 to 4 and raises OK from 2,279 to 2,526.
 
+## Windows 10 1607 runtime gate
+
+The packaged preprocessor/launcher was run on the required target platform against the real S0141 source session.
+
+- Platform: `Windows-10-10.0.14393-SP0` / Windows build **14393**.
+- Python: **3.12.7 x64**.
+- Session: **S0141**.
+- Source CANLOG SHA-256: `0034c9e165a8daff2a53473fc20177a19ba8c3d9b68dd691b73cb178dad24edd`.
+- RAW records: **1,021,568** source = native = expanded.
+- RX/TX: **1,021,568 / 0** source = native = expanded.
+- Logical record SHA-256: `a9d96bfc8ec9f3ad575dac0f6c82798f9fd73793c457fa6c276b983dfd345089` source = native = expanded.
+- `RAW_000.TCB` SHA-256: `824359f8d18b80d863637f7e3f41e8c26d56f1c57f9c06f23aff626efaf148ab` source = native = expanded.
+- Truncated tail bytes: **0**.
+- `SESSION.META` SHA-256: `e6831d85bade4baa466fb57b18605ae8b6cab4884f0329faea22352d884eaf17`.
+- Expanded CANLOG SHA-256: `a2368990e8983484778e5019ac05e7e7f357bf342d5ec18bfffa69a6f0a21919`.
+- Failures: **0**.
+- Final `ERRORLEVEL`: **0**.
+- Runtime status: **PASS**.
+
+Retained evidence hashes:
+
+- `validation/WINDOWS_1607_VALIDATION.json`: SHA-256 `5246090d1d05ae30514798abdf63cb0c3ca54381ebdb84540a25a536c4a446f1`.
+- `validation/WINDOWS_1607_VALIDATION.log`: SHA-256 `9d293ee489c6c5cb0d4fb4b2d266ccb9bac1475bb5602deb562f56cf32d2839f`.
+
 ## Interpretation
 
-The three historical holdouts demonstrate that the offline preprocessor can reproduce a Builder-compatible package while preserving the authoritative TCB evidence byte-for-byte. Where the historical CSV sidecars omitted response information still present in RAW, the rebuilt package increases usable evidence rather than silently forcing equality with an incomplete sidecar.
+The three historical holdouts demonstrate that the offline preprocessor can reproduce a Builder-compatible package while preserving authoritative TCB evidence byte-for-byte. The target-machine S0141 run independently demonstrates that the packaged application can perform the legacy -> synthetic TVM1 -> expanded legacy round trip on Windows 10 1607 without changing the RAW evidence stream.
 
-This validates the architectural decision to stop treating the firmware-generated diagnostic/decoded CSV products as authoritative. RAW TCB plus TVM1 metadata can be the native acquisition contract, with legacy CSV/JSON products reconstructed offline.
+Where historical CSV sidecars omitted response information still present in RAW, the rebuilt package increases usable evidence rather than silently forcing equality with an incomplete sidecar. This validates the architectural decision to stop treating firmware-generated diagnostic/decoded CSV products as authoritative. RAW TCB plus TVM1 metadata are authorized as the native acquisition contract, with legacy CSV/JSON products reconstructed offline.
 
-## Remaining release gate
+## Final authorization
 
-Only the Windows 10 1607 application/runtime check remains. It must validate the preprocessor/launcher on one real session and record Python path/version, source/output hashes, explicit PASS/FAIL stages and final `ERRORLEVEL`.
+All four required Task 9 conditions are PASS:
 
-Until that platform check passes:
-
-```text
-TVM1 OFFLINE EXPANDER GATE: FAIL — do not remove legacy firmware SD products.
-```
-
-After it passes, with the 3/3 Builder campaign above unchanged:
+1. S0141 RAW identity + Builder compatibility: **PASS**.
+2. S0149 RAW identity + Builder compatibility: **PASS**.
+3. S0128 RAW identity + Builder compatibility: **PASS**.
+4. Windows 10 1607 packaged runtime validation: **PASS**.
 
 ```text
 TVM1 OFFLINE EXPANDER GATE: PASS — firmware SD-product removal may proceed.
