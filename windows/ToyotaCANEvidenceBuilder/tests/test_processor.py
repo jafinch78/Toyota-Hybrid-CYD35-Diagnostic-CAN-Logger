@@ -16,6 +16,10 @@ class ProcessorTests(unittest.TestCase):
             manifest = {"format": "ToyotaHybridCAN-Capture", "format_version": "1.3",
                         "firmware_version": "v2.3", "raw_format": "TCB1_24_byte_records",
                         "vehicle_profile": "PRIUS GEN 2", "profile_confidence_pct": 85,
+                        "counter_scope": "since_boot", "frames_processed_by_logger": 1,
+                        "session_received_frames": 2, "received_frames": 3,
+                        "can_queue_drops": 0, "diagnostic_queue_drops": 0,
+                        "sd_log_drops": 0, "sd_log_dropped_frames_estimate": 0,
                         "extra_future_field": {"preserved": True}}
             (session / "MANIFEST.JSON").write_text(json.dumps(manifest), encoding="utf-8")
             header = b"TCB1" + bytes([1, 24]) + bytes(10)
@@ -47,6 +51,8 @@ class ProcessorTests(unittest.TestCase):
             summary = json.loads((output / "SESSION_SUMMARY.json").read_text(encoding="utf-8"))
             self.assertTrue(summary["alignment"]["valid"])
             self.assertTrue(summary["manifest"]["extra_future_field"]["preserved"])
+            self.assertEqual(summary["counter_reconciliation"]["status"], "RECONCILED")
+            self.assertEqual(summary["counter_reconciliation"]["raw_minus_processed"], 0)
 
     def test_malformed_manifest_produces_report_without_guessing(self):
         with tempfile.TemporaryDirectory() as temporary:

@@ -1,5 +1,78 @@
 # Changelog
 
+## 1.0.4 (in development)
+
+- Updated the isolated development tree's bundled default to Toyota Hybrid CAN
+  Database v0.5.9/schema 1.2.0 and retained v0.5.5-v0.5.8 for rollback.
+- Added S0069 AHV40 `7E2/21C3` regression coverage for MG1/MG2 RPM, torque,
+  engine-speed, field-level grades, OCR aliases, and candidate-registry safety.
+- Replaced reusable nearest-neighbor pairs with explicit per-field fixed-lag,
+  one-to-one matching and added unique-frame/effective-sample accounting.
+- Strengthened local confirmation with minimum pair, frame, time-bucket,
+  time-span, dynamic-range, agreement, RMSE, median-error, bounds, expected-value,
+  and OCR semantic gates.
+- Added zero-pair cause codes, separate graph match/effective-event metrics,
+  outlier/rejected-semantic/field-decision exports, and matching HTML panels.
+- Added per-frame app/layout detection and contiguous segments, including the
+  S0060 Hybrid Assistant-over-Dr. Prius routing correction.
+- Added strict yellow-guide camera cropping for recorded external displays.
+- Added SHA-256 archive deduplication and blocking ambiguity records for multiple
+  distinct CANLOG candidates.
+- Added scoped counter reconciliation and matched-frame proxy OCR validation;
+  unapproved proxies are never selected as the OCR source.
+
+## 1.0.3.post1 — 2026-09-08
+
+- Changed the bundled default database from v0.5.5/schema 1.0.0 to
+  v0.5.8/schema 1.2.0 while retaining v0.5.5, v0.5.6, and v0.5.7 for explicit
+  compatibility selection.
+- Added exact schema support for 1.0.0, 1.1.0, 1.1.1, and 1.2.0 and validation
+  of definition-, field-, repeat-, and derived-field evidence grades.
+- Added `FIELD_SPECIFIC` definition handling without flattening mixed member
+  grades.
+- Validated the v0.5.8 candidate registry as safely excluded metadata and kept
+  it outside decoder lookup and all promotion behavior.
+- Added GUI and CLI database selection plus path, version, schema, definition
+  counts, SHA-256, and post-processing immutability status to evidence outputs.
+- Added regression tests across database v0.5.5–v0.5.8, unsafe candidate
+  registry rejection, member-grade propagation, and in-process database
+  mutation detection.
+- Did not alter OCR extraction, app/layout routing, CAN/OCR pairing, advisory
+  grading thresholds, or session counter reconciliation.
+
+Rollback: retain the original byte-identical Toyota CAN Evidence Builder
+1.0.3 ZIP with SHA-256
+`b0ea17e5ffc301d7913f3765ba4d174f25c91ca7d16b3b6b5d20b040deb23ddb`.
+
+## 1.0.3 — 2026-09-01
+
+- Updated the bundled decoder database to Toyota Hybrid CAN Database v0.5.5.
+- Added generic `field_map`, variable block/health/resistance array, identity,
+  VIN, and response-signature decoding with field-level evidence metadata.
+- Added authoritative profile selection from confirmed diagnostic identity.
+  S0018 `7E0/21C1` `ZVW35 2ZRFXE` now overrides the logger's incorrect Camry
+  heuristic and produces an explicit profile-conflict record.
+- Added PHV decoding for eight seven-cell aggregate block voltages, eight
+  resistances, voltage extrema/indexes, pack/current/SoC fields, TB1-TB12 and
+  intake temperatures, MG/inverter temperature fields, and inverter
+  coolant/pump fields. No 56-individual-cell decoder was added.
+- Added masked VIN/model identity exports and ensured response signatures are
+  not incorrectly emitted as identity rows.
+- Added local CAN/OCR correlation and advisory evidence grading with sample
+  counts, agreement, RMSE, lag, bounds failures, expected mismatches, and
+  independent-session counts. Database grades are never changed automatically.
+- Added BLE `START_PASSIVE` batch pairing and aggregate batch evidence output.
+- Added a self-contained interactive offline report, signal-candidate export,
+  compact evidence capsule, OCR keyframes, and optional validated 720p/10-fps
+  review-proxy generation for large videos. OCR automatically uses a newly
+  created proxy while preserving the source video and hashes.
+- Generalized `BATTERY_BLOCKS_ALIGNED.csv` beyond 17-block Camry responses and
+  added `RESISTANCE_ARRAYS_ALIGNED.csv` and `DECODED_FIELDS_ALIGNED.csv`.
+- Kept all processing passive: no CAN transmit, clear-code, reset, or control
+  path is introduced.
+
+Rollback: use Toyota CAN Evidence Builder 1.0.2 with Toyota Hybrid CAN Database v0.5.3.
+
 ## 1.0.2 — 2026-08-30
 
 - Added automatic per-frame portrait/landscape detection for Samsung screen

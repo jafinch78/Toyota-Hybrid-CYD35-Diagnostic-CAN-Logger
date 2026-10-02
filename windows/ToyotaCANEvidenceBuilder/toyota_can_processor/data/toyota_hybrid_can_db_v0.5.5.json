@@ -1,0 +1,2221 @@
+{
+  "database": "ToyotaHybridCAN",
+  "version": "0.5.5",
+  "schema_version": "1.0.0",
+  "released_utc": "2026-09-01T00:00:00Z",
+  "rollback": "Toyota_Hybrid_CAN_Database_v0.5.4.xlsx",
+  "profiles": {
+    "PRIUS_GEN1": {
+      "platform": "NHW11",
+      "block_count": null
+    },
+    "PRIUS_GEN2": {
+      "platform": "NHW20",
+      "block_count": 14,
+      "cell_count": 168,
+      "cells_per_block": 12,
+      "chemistry": "NiMH"
+    },
+    "PRIUS_GEN3": {
+      "platform": "ZVW30",
+      "block_count": 14
+    },
+    "PRIUS_PHV_GEN1": {
+      "platform": "ZVW35",
+      "block_count": 8,
+      "cell_count": 56,
+      "cells_per_block": 7,
+      "chemistry": "Lithium-ion NMC",
+      "individual_cell_values_available": false,
+      "notes": "S0018 confirmed ZVW35/2ZRFXE identity and eight seven-cell aggregate blocks. No validated 56-individual-cell voltage decoder is present.",
+      "identity_model_codes": [
+        "ZVW35"
+      ],
+      "engine_codes": [
+        "2ZRFXE"
+      ]
+    },
+    "CAMRY_HYBRID_GEN1": {
+      "platform": "AHV40",
+      "block_count": 17,
+      "cell_count": 204,
+      "cells_per_block": 12,
+      "chemistry": "NiMH"
+    }
+  },
+  "definitions": [
+    {
+      "key": "AHV40_HYBRID_ECU_21CE_BLOCK_VOLTAGES",
+      "profile": "CAMRY_HYBRID_GEN1",
+      "request_id": "7E2",
+      "response_id": "7EA",
+      "service": "21",
+      "pid": "CE",
+      "response_prefix": "61CE",
+      "preamble_bytes": 3,
+      "decoder": "block_array",
+      "repeat": {
+        "count": 17,
+        "width_bytes": 2,
+        "endian": "big",
+        "offset": -32768,
+        "scale": 0.01,
+        "unit": "V"
+      },
+      "bounds": {
+        "minimum": 5.0,
+        "maximum": 25.0
+      },
+      "safety_class": "READ_ONLY_DIAGNOSTIC",
+      "evidence_grade": "CONFIRMED",
+      "transport": "ISO-TP",
+      "source": "S0010, S0012, S0013, and S0017 2007 Camry Hybrid; Hybrid Assistant, Dr. Prius, and Autel MAXIAP200; CYD logger v2.4.2",
+      "validation": "Three sessions reconstructed the 17-block array. S0013 contained 237 decodable 21CE segments and 84 time-aligned graph rows; median all-row CAN-to-OCR block RMSE was 0.021144 V. Independent S0017 Autel MAXIAP200 correlation supplied 34 successful transactions; 77 of 79 OCR block labels matched exactly, median best-nearby RMSE was 0.000 V, and displayed SoC/current examples matched exactly.",
+      "fields": [
+        {
+          "name": "battery_soc",
+          "offset": 0,
+          "width_bytes": 1,
+          "formula": "A/2",
+          "unit": "%"
+        },
+        {
+          "name": "battery_current",
+          "offset": 1,
+          "width_bytes": 2,
+          "endian": "big",
+          "formula": "uint16/100-327.68",
+          "unit": "A"
+        }
+      ],
+      "observations": {
+        "sessions": [
+          "S0010",
+          "S0012",
+          "S0013",
+          "S0017"
+        ],
+        "s0013_decodable_segments": 237,
+        "s0013_aligned_graph_rows": 84,
+        "s0017_successful_transactions": 34,
+        "s0017_ocr_block_values_compared": 79,
+        "s0017_exact_block_value_matches": 77,
+        "s0017_median_best_nearby_rmse_v": 0.0,
+        "s0017_maximum_best_nearby_rmse_v": 0.018898223650460958
+      }
+    },
+    {
+      "key": "AHV40_BATTERY_ECU_2101_SOC_CURRENT_VOLTAGE",
+      "profile": "CAMRY_HYBRID_GEN1",
+      "request_id": "7E3",
+      "response_id": "7EB",
+      "service": "21",
+      "pid": "01",
+      "decoder": "catalog_candidate",
+      "safety_class": "READ_ONLY_DIAGNOSTIC",
+      "evidence_grade": "CANDIDATE",
+      "source": "2007-2011 camry hybrid PID table - Google Search.pdf",
+      "notes": "Candidate fields: SoC A/2; signed current ((B*256)+C)/100; voltage ((D*256)+E)/10. Not observed in S0010."
+    },
+    {
+      "key": "AHV40_BATTERY_ECU_2102_TEMPERATURES",
+      "profile": "CAMRY_HYBRID_GEN1",
+      "request_id": "7E3",
+      "response_id": "7EB",
+      "service": "21",
+      "pid": "02",
+      "decoder": "catalog_candidate",
+      "safety_class": "READ_ONLY_DIAGNOSTIC",
+      "evidence_grade": "CANDIDATE",
+      "source": "2007-2011 camry hybrid PID table - Google Search.pdf",
+      "notes": "Candidate temperatures A-40, B-40, C-40 deg C. Not observed in S0010."
+    },
+    {
+      "key": "AHV40_HYBRID_ECU_2122_MG_STATOR_TEMPERATURES",
+      "profile": "CAMRY_HYBRID_GEN1",
+      "request_id": "7E2",
+      "response_id": "7EA",
+      "service": "21",
+      "pid": "22",
+      "decoder": "catalog_candidate",
+      "safety_class": "READ_ONLY_DIAGNOSTIC",
+      "evidence_grade": "CANDIDATE",
+      "source": "2007-2011 camry hybrid PID table - Google Search.pdf",
+      "notes": "Candidate MG1/MG2 stator temperatures; not observed in S0010."
+    },
+    {
+      "key": "AHV40_HYBRID_ECU_212B_INVERTER_TEMPERATURES",
+      "profile": "CAMRY_HYBRID_GEN1",
+      "request_id": "7E2",
+      "response_id": "7EA",
+      "service": "21",
+      "pid": "2B",
+      "decoder": "catalog_candidate",
+      "safety_class": "READ_ONLY_DIAGNOSTIC",
+      "evidence_grade": "CANDIDATE",
+      "source": "2007-2011 camry hybrid PID table - Google Search.pdf",
+      "notes": "Candidate MG1/MG2 inverter temperatures; not observed in S0010."
+    },
+    {
+      "key": "AHV40_BATTERY_ECU_2141_2144_BLOCK_VOLTAGES",
+      "profile": "CAMRY_HYBRID_GEN1",
+      "request_id": "7E3",
+      "response_id": "7EB",
+      "service": "21",
+      "pid": "41",
+      "pid_range": "41-44",
+      "decoder": "catalog_candidate",
+      "safety_class": "READ_ONLY_DIAGNOSTIC",
+      "evidence_grade": "CANDIDATE",
+      "source": "2007-2011 camry hybrid PID table - Google Search.pdf",
+      "notes": "Seventeen block-voltage catalog candidates across 2141-2144; not requested by Hybrid Assistant in S0010 and not interchangeable with observed 7E2/21CE."
+    },
+    {
+      "key": "AHV40_BATTERY_ECU_2145_2148_INTERNAL_RESISTANCE",
+      "profile": "CAMRY_HYBRID_GEN1",
+      "request_id": "7E3",
+      "response_id": "7EB",
+      "service": "21",
+      "pid": "45",
+      "pid_range": "45-48",
+      "decoder": "catalog_candidate",
+      "safety_class": "READ_ONLY_DIAGNOSTIC",
+      "evidence_grade": "CANDIDATE",
+      "source": "2007-2011 camry hybrid PID table - Google Search.pdf",
+      "notes": "Seventeen internal-resistance catalog candidates across 2145-2148; unobserved and unvalidated."
+    },
+    {
+      "key": "AHV40_HYBRID_ECU_13B0_READ_DTC_BY_STATUS",
+      "profile": "CAMRY_HYBRID_GEN1",
+      "request_id": "7E2",
+      "response_id": "7EA",
+      "service": "13",
+      "pid": "B0",
+      "response_prefix": "53",
+      "decoder": "dtc_status_response",
+      "safety_class": "READ_ONLY_DIAGNOSTIC",
+      "evidence_grade": "PROBABLE",
+      "source": "S0012 2007 Camry Hybrid; Dr. Prius Special Features at video 291.135-294.192 s; CYD logger v2.4.2",
+      "validation": "Observed twice with 53 00 responses while the battery-code read operation was performed; response indicates no DTC was present. Repeat with a known stored DTC is required to validate code-byte layout."
+    },
+    {
+      "key": "AHV40_HYBRID_ECU_1380_READ_DTC_BY_STATUS",
+      "profile": "CAMRY_HYBRID_GEN1",
+      "request_id": "7E2",
+      "response_id": "7EA",
+      "service": "13",
+      "pid": "80",
+      "response_prefix": "53",
+      "decoder": "dtc_status_response",
+      "safety_class": "READ_ONLY_DIAGNOSTIC",
+      "evidence_grade": "PROBABLE",
+      "source": "S0012 2007 Camry Hybrid; Dr. Prius Special Features at video 291.293-294.360 s; CYD logger v2.4.2",
+      "validation": "Observed twice with 53 00 responses during the battery-code read operation; treat B0 and 80 as separate status masks."
+    },
+    {
+      "key": "AHV40_ENGINE_ECU_13B0_READ_DTC_BY_STATUS",
+      "profile": "CAMRY_HYBRID_GEN1",
+      "request_id": "7E0",
+      "response_id": "7E8",
+      "service": "13",
+      "pid": "B0",
+      "response_prefix": "53",
+      "decoder": "dtc_status_response",
+      "safety_class": "READ_ONLY_DIAGNOSTIC",
+      "evidence_grade": "PROBABLE",
+      "source": "S0012 2007 Camry Hybrid; Dr. Prius Special Features at video 299.926-305.853 s; CYD logger v2.4.2",
+      "validation": "Observed three times with 53 00 responses while the engine-code read operation was performed; response indicates no DTC was present."
+    },
+    {
+      "key": "AHV40_HYBRID_ECU_04_CLEAR_DTC_QUARANTINED",
+      "profile": "CAMRY_HYBRID_GEN1",
+      "request_id": "7E2",
+      "response_id": "7EA",
+      "service": "04",
+      "pid": null,
+      "response_prefix": "44",
+      "decoder": "clear_dtc_acknowledgement",
+      "safety_class": "CONTROL_WRITE_QUARANTINED",
+      "evidence_grade": "PROBABLE",
+      "source": "S0012 2007 Camry Hybrid; Dr. Prius Special Features at video 276.915-285.526 s; CYD logger v2.4.2",
+      "validation": "Four passively observed requests received 44 acknowledgements during the battery-code clear operation. Never add to an automatic transmit workflow."
+    },
+    {
+      "key": "AHV40_ENGINE_ECU_04_CLEAR_DTC_QUARANTINED",
+      "profile": "CAMRY_HYBRID_GEN1",
+      "request_id": "7E0",
+      "response_id": "7E8",
+      "service": "04",
+      "pid": null,
+      "response_prefix": "44",
+      "decoder": "clear_dtc_acknowledgement",
+      "safety_class": "CONTROL_WRITE_QUARANTINED",
+      "evidence_grade": "PROBABLE",
+      "source": "S0012 2007 Camry Hybrid; Dr. Prius Special Features at video 311.444-314.525 s; CYD logger v2.4.2",
+      "validation": "Three passively observed requests received 44 acknowledgements during the engine-code clear operation. Never add to an automatic transmit workflow."
+    },
+    {
+      "key": "NHW20_BATTERY_ECU_21CE_SOC_CURRENT_BLOCK_VOLTAGES",
+      "profile": "PRIUS_GEN2",
+      "request_id": "7E3",
+      "response_id": "7EB",
+      "service": "21",
+      "pid": "CE",
+      "response_prefix": "61CE",
+      "decoder": "block_array",
+      "safety_class": "READ_ONLY_DIAGNOSTIC",
+      "evidence_grade": "CONFIRMED",
+      "transport": "ISO-TP",
+      "source": "S0016 2004 Prius Gen 2; Autel MAXIAP200 OCR/CAN correlation; CYD logger v2.4.2",
+      "preamble_bytes": 3,
+      "fields": [
+        {
+          "name": "battery_soc",
+          "offset": 0,
+          "width_bytes": 1,
+          "formula": "A/2",
+          "unit": "%"
+        },
+        {
+          "name": "battery_current",
+          "offset": 1,
+          "width_bytes": 2,
+          "endian": "big",
+          "formula": "uint16/100-327.68",
+          "unit": "A"
+        }
+      ],
+      "repeat": {
+        "name": "block_voltage",
+        "count": 14,
+        "width_bytes": 2,
+        "endian": "big",
+        "offset": -32768,
+        "scale": 0.01,
+        "unit": "V"
+      },
+      "bounds": {
+        "minimum": 10.0,
+        "maximum": 20.0
+      },
+      "observations": {
+        "successful_transactions": 61,
+        "exact_ap200_ocr_matches": true
+      },
+      "validation": "AP200-displayed SoC, current, and all 14 block voltages were reproduced from the same diagnostic responses."
+    },
+    {
+      "key": "NHW20_BATTERY_ECU_21D0_BLOCK_HEALTH",
+      "profile": "PRIUS_GEN2",
+      "request_id": "7E3",
+      "response_id": "7EB",
+      "service": "21",
+      "pid": "D0",
+      "response_prefix": "61D0",
+      "decoder": "block_health_array",
+      "safety_class": "READ_ONLY_DIAGNOSTIC",
+      "evidence_grade": "CONFIRMED",
+      "transport": "ISO-TP",
+      "source": "S0016 2004 Prius Gen 2; Autel MAXIAP200 OCR/CAN correlation; CYD logger v2.4.2",
+      "fields": [
+        {
+          "name": "block_count",
+          "offset": 0,
+          "width_bytes": 1,
+          "formula": "A",
+          "expected": 14
+        },
+        {
+          "name": "reported_voltage_value_1",
+          "offset": 9,
+          "width_bytes": 2,
+          "endian": "big",
+          "formula": "(uint16-32768)/100",
+          "unit": "V",
+          "semantic_status": "CANDIDATE_EXTREMA"
+        },
+        {
+          "name": "reported_voltage_index_1",
+          "offset": 11,
+          "width_bytes": 1,
+          "formula": "L",
+          "semantic_status": "CANDIDATE_INDEX"
+        },
+        {
+          "name": "reported_voltage_value_2",
+          "offset": 12,
+          "width_bytes": 2,
+          "endian": "big",
+          "formula": "(uint16-32768)/100",
+          "unit": "V",
+          "semantic_status": "CANDIDATE_EXTREMA"
+        },
+        {
+          "name": "reported_voltage_index_2",
+          "offset": 14,
+          "width_bytes": 1,
+          "formula": "O",
+          "semantic_status": "CANDIDATE_INDEX"
+        }
+      ],
+      "repeat": {
+        "name": "block_internal_resistance",
+        "offset": 15,
+        "count": 14,
+        "width_bytes": 1,
+        "scale": 0.001,
+        "unit": "ohm"
+      },
+      "observations": {
+        "successful_transactions": 73,
+        "exact_ap200_ocr_matches": true
+      },
+      "validation": "Fourteen resistance values and displayed block-health values matched AP200. Extrema/index labels remain explicitly candidate semantics."
+    },
+    {
+      "key": "AHV40_ENGINE_ECU_21C1_MODEL_SIGNATURE",
+      "profile": "CAMRY_HYBRID_GEN1",
+      "request_id": "7E0",
+      "response_id": "7E8",
+      "service": "21",
+      "pid": "C1",
+      "response_prefix": "61C1",
+      "decoder": "ascii_model_signature",
+      "safety_class": "READ_ONLY_DIAGNOSTIC",
+      "evidence_grade": "CONFIRMED",
+      "transport": "ISO-TP",
+      "source": "S0012, S0013, and S0017 2007 Camry Hybrid; passive diagnostic observation with Hybrid Assistant, Dr. Prius, and Autel MAXIAP200; CYD logger v2.4.2",
+      "signature": {
+        "ascii_contains": "AHV40L",
+        "minimum_response_bytes": 18
+      },
+      "observations": {
+        "sessions": [
+          "S0012",
+          "S0013",
+          "S0017"
+        ],
+        "response_ascii_prefix": "AHV40L 2AZFXE",
+        "s0017_successful_transactions": 20
+      },
+      "validation": "The 7E0/21C1 AHV40L model signature was observed in S0012/S0013 and twenty times during the S0017 AP200 scan."
+    },
+    {
+      "key": "AHV40_HYBRID_ECU_21C1_MODEL_SIGNATURE",
+      "profile": "CAMRY_HYBRID_GEN1",
+      "request_id": "7E2",
+      "response_id": "7EA",
+      "service": "21",
+      "pid": "C1",
+      "response_prefix": "61C1",
+      "decoder": "ascii_model_signature",
+      "safety_class": "READ_ONLY_DIAGNOSTIC",
+      "evidence_grade": "CONFIRMED",
+      "transport": "ISO-TP",
+      "source": "S0012, S0013, and S0017 2007 Camry Hybrid; passive diagnostic observation with Hybrid Assistant, Dr. Prius, and Autel MAXIAP200; CYD logger v2.4.2",
+      "signature": {
+        "ascii_contains": "AHV40L",
+        "minimum_response_bytes": 18
+      },
+      "observations": {
+        "sessions": [
+          "S0017"
+        ],
+        "response_ascii_prefix": "AHV40L 2AZFXE",
+        "successful_transactions": 10
+      },
+      "validation": "Ten S0017 7E2/21C1 responses contained AHV40L 2AZFXE and matched the AP200 Model code AHV40L display."
+    },
+    {
+      "key": "AHV40_HYBRID_ECU_21D0_BLOCK_HEALTH",
+      "profile": "CAMRY_HYBRID_GEN1",
+      "request_id": "7E2",
+      "response_id": "7EA",
+      "service": "21",
+      "pid": "D0",
+      "response_prefix": "61D0",
+      "decoder": "block_health_array",
+      "safety_class": "READ_ONLY_DIAGNOSTIC",
+      "evidence_grade": "CONFIRMED",
+      "transport": "ISO-TP",
+      "source": "S0012, S0013, and S0017 2007 Camry Hybrid; passive diagnostic observation with Hybrid Assistant, Dr. Prius, and Autel MAXIAP200; CYD logger v2.4.2",
+      "fields": [
+        {
+          "name": "block_count",
+          "offset": 0,
+          "width_bytes": 1,
+          "formula": "A",
+          "expected": 17
+        },
+        {
+          "name": "minimum_block_voltage",
+          "offset": 9,
+          "width_bytes": 2,
+          "endian": "big",
+          "formula": "(uint16-32768)/100",
+          "unit": "V"
+        },
+        {
+          "name": "minimum_block_number",
+          "offset": 11,
+          "width_bytes": 1,
+          "formula": "L+1",
+          "unit": "1-based block"
+        },
+        {
+          "name": "maximum_block_voltage",
+          "offset": 12,
+          "width_bytes": 2,
+          "endian": "big",
+          "formula": "(uint16-32768)/100",
+          "unit": "V"
+        },
+        {
+          "name": "maximum_block_number",
+          "offset": 14,
+          "width_bytes": 1,
+          "formula": "O+1",
+          "unit": "1-based block"
+        }
+      ],
+      "repeat": {
+        "name": "block_internal_resistance",
+        "offset": 15,
+        "count": 17,
+        "width_bytes": 1,
+        "scale": 0.001,
+        "unit": "ohm"
+      },
+      "observations": {
+        "s0012_bundled_transactions": 81,
+        "s0013_bundled_transactions": 81,
+        "s0013_standalone_transactions": 1,
+        "s0017_successful_transactions": 59
+      },
+      "validation": "S0017 AP200 labels confirmed block count, minimum/maximum voltages, one-based block numbers, and all 17 resistance values; raw 0x13 displayed as 0.019 ohm."
+    },
+    {
+      "key": "AHV40_HYBRID_ECU_21C3_MG_TEMPERATURES",
+      "profile": "CAMRY_HYBRID_GEN1",
+      "request_id": "7E2",
+      "response_id": "7EA",
+      "service": "21",
+      "pid": "C3",
+      "response_prefix": "61C3",
+      "decoder": "field_map",
+      "safety_class": "READ_ONLY_DIAGNOSTIC",
+      "evidence_grade": "CONFIRMED",
+      "transport": "ISO-TP",
+      "source": "S0012, S0013, and S0017 2007 Camry Hybrid; passive diagnostic observation with Hybrid Assistant, Dr. Prius, and Autel MAXIAP200; CYD logger v2.4.2",
+      "signature": {
+        "response_length_bytes": 40
+      },
+      "fields": [
+        {
+          "name": "mg1_inverter_temperature",
+          "offset": 18,
+          "width_bytes": 1,
+          "formula": "S-50",
+          "unit": "degC"
+        },
+        {
+          "name": "mg2_inverter_temperature",
+          "offset": 19,
+          "width_bytes": 1,
+          "formula": "T-50",
+          "unit": "degC"
+        },
+        {
+          "name": "mg1_motor_temperature",
+          "offset": 20,
+          "width_bytes": 1,
+          "formula": "U-50",
+          "unit": "degC"
+        },
+        {
+          "name": "mg2_motor_temperature",
+          "offset": 21,
+          "width_bytes": 1,
+          "formula": "V-50",
+          "unit": "degC"
+        }
+      ],
+      "observations": {
+        "s0013_successful_transactions": 270,
+        "s0017_successful_transactions": 71
+      },
+      "validation": "S0017 AP200 labels exactly matched inverter temperatures 27/27 degC and motor temperatures 26/25 or 27/25 degC.",
+      "notes": "Only the four listed fields are confirmed; all other 21C3 bytes remain candidate/unknown."
+    },
+    {
+      "key": "AHV40_HYBRID_ECU_21C4_SIGNATURE",
+      "profile": "CAMRY_HYBRID_GEN1",
+      "request_id": "7E2",
+      "response_id": "7EA",
+      "service": "21",
+      "pid": "C4",
+      "response_prefix": "61C4",
+      "decoder": "response_signature",
+      "safety_class": "READ_ONLY_DIAGNOSTIC",
+      "evidence_grade": "CANDIDATE",
+      "transport": "ISO-TP",
+      "source": "S0012, S0013, and S0017 2007 Camry Hybrid; passive diagnostic observation with Hybrid Assistant, Dr. Prius, and Autel MAXIAP200; CYD logger v2.4.2",
+      "signature": {
+        "response_length_bytes": 17
+      },
+      "observations": {
+        "s0013_successful_transactions": 276
+      },
+      "notes": "Useful as a profile fingerprint only; field meanings are not inferred."
+    },
+    {
+      "key": "AHV40_HYBRID_ECU_21CF_BATTERY_TEMPERATURES",
+      "profile": "CAMRY_HYBRID_GEN1",
+      "request_id": "7E2",
+      "response_id": "7EA",
+      "service": "21",
+      "pid": "CF",
+      "response_prefix": "61CF",
+      "decoder": "field_map",
+      "safety_class": "READ_ONLY_DIAGNOSTIC",
+      "evidence_grade": "CONFIRMED",
+      "transport": "ISO-TP",
+      "source": "S0012, S0013, and S0017 2007 Camry Hybrid; passive diagnostic observation with Hybrid Assistant, Dr. Prius, and Autel MAXIAP200; CYD logger v2.4.2",
+      "signature": {
+        "response_length_bytes": 30
+      },
+      "fields": [
+        {
+          "name": "battery_inhaling_air_temperature",
+          "offset": 0,
+          "width_bytes": 2,
+          "endian": "big",
+          "formula": "(uint16-32768)/100",
+          "unit": "degC"
+        },
+        {
+          "name": "battery_temperature_1",
+          "offset": 10,
+          "width_bytes": 2,
+          "endian": "big",
+          "formula": "(uint16-32768)/100",
+          "unit": "degC"
+        },
+        {
+          "name": "battery_temperature_2",
+          "offset": 12,
+          "width_bytes": 2,
+          "endian": "big",
+          "formula": "(uint16-32768)/100",
+          "unit": "degC"
+        },
+        {
+          "name": "battery_temperature_3",
+          "offset": 14,
+          "width_bytes": 2,
+          "endian": "big",
+          "formula": "(uint16-32768)/100",
+          "unit": "degC"
+        },
+        {
+          "name": "battery_temperature_4",
+          "offset": 16,
+          "width_bytes": 2,
+          "endian": "big",
+          "formula": "(uint16-32768)/100",
+          "unit": "degC"
+        }
+      ],
+      "observations": {
+        "s0013_standalone_transactions": 68,
+        "s0013_bundled_transactions": 81,
+        "s0017_successful_transactions": 35
+      },
+      "validation": "S0017 AP200 labels matched battery intake and temperatures 1-4, including 27.49, 27.95, 28.07, and 27.37 degC examples.",
+      "notes": "Only the five listed fields are confirmed; all other 21CF bytes remain candidate/unknown."
+    },
+    {
+      "key": "AHV40_HYBRID_ECU_2105_ENGINE_COOLANT_TEMPERATURE",
+      "profile": "CAMRY_HYBRID_GEN1",
+      "request_id": "7E2",
+      "response_id": "7EA",
+      "service": "21",
+      "pid": "05",
+      "response_prefix": "6105",
+      "decoder": "field_map",
+      "safety_class": "READ_ONLY_DIAGNOSTIC",
+      "evidence_grade": "CONFIRMED",
+      "transport": "ISO-TP",
+      "source": "S0012, S0013, and S0017 2007 Camry Hybrid; passive diagnostic observation with Hybrid Assistant, Dr. Prius, and Autel MAXIAP200; CYD logger v2.4.2",
+      "fields": [
+        {
+          "name": "engine_coolant_temperature",
+          "offset": 0,
+          "width_bytes": 1,
+          "formula": "A-40",
+          "unit": "degC"
+        }
+      ],
+      "observations": {
+        "s0017_successful_transactions": 5
+      },
+      "validation": "S0017 byte 0x53 decoded to 43 degC and matched the AP200 label."
+    },
+    {
+      "key": "AHV40_HYBRID_ECU_210F_INTAKE_AIR_TEMPERATURE",
+      "profile": "CAMRY_HYBRID_GEN1",
+      "request_id": "7E2",
+      "response_id": "7EA",
+      "service": "21",
+      "pid": "0F",
+      "response_prefix": "610F",
+      "decoder": "field_map",
+      "safety_class": "READ_ONLY_DIAGNOSTIC",
+      "evidence_grade": "CONFIRMED",
+      "transport": "ISO-TP",
+      "source": "S0012, S0013, and S0017 2007 Camry Hybrid; passive diagnostic observation with Hybrid Assistant, Dr. Prius, and Autel MAXIAP200; CYD logger v2.4.2",
+      "fields": [
+        {
+          "name": "intake_air_temperature",
+          "offset": 0,
+          "width_bytes": 1,
+          "formula": "A-40",
+          "unit": "degC"
+        }
+      ],
+      "observations": {
+        "s0017_successful_transactions": 5
+      },
+      "validation": "S0017 byte 0x4C decoded to 36 degC and matched the AP200 label."
+    },
+    {
+      "key": "AHV40_HYBRID_ECU_210C_ENGINE_SPEED",
+      "profile": "CAMRY_HYBRID_GEN1",
+      "request_id": "7E2",
+      "response_id": "7EA",
+      "service": "21",
+      "pid": "0C",
+      "response_prefix": "610C",
+      "decoder": "field_map",
+      "safety_class": "READ_ONLY_DIAGNOSTIC",
+      "evidence_grade": "CONFIRMED",
+      "transport": "ISO-TP",
+      "source": "S0012, S0013, and S0017 2007 Camry Hybrid; passive diagnostic observation with Hybrid Assistant, Dr. Prius, and Autel MAXIAP200; CYD logger v2.4.2",
+      "fields": [
+        {
+          "name": "engine_speed",
+          "offset": 0,
+          "width_bytes": 2,
+          "endian": "big",
+          "formula": "uint16/4",
+          "unit": "rpm"
+        }
+      ],
+      "observations": {
+        "s0017_successful_transactions": 4
+      },
+      "validation": "S0017 0x0000 decoded to 0 rpm and matched the stationary AP200 label."
+    },
+    {
+      "key": "AHV40_HYBRID_ECU_211F_ENGINE_RUN_TIME",
+      "profile": "CAMRY_HYBRID_GEN1",
+      "request_id": "7E2",
+      "response_id": "7EA",
+      "service": "21",
+      "pid": "1F",
+      "response_prefix": "611F",
+      "decoder": "field_map",
+      "safety_class": "READ_ONLY_DIAGNOSTIC",
+      "evidence_grade": "CONFIRMED",
+      "transport": "ISO-TP",
+      "source": "S0012, S0013, and S0017 2007 Camry Hybrid; passive diagnostic observation with Hybrid Assistant, Dr. Prius, and Autel MAXIAP200; CYD logger v2.4.2",
+      "fields": [
+        {
+          "name": "engine_run_time",
+          "offset": 0,
+          "width_bytes": 2,
+          "endian": "big",
+          "formula": "uint16",
+          "unit": "s"
+        }
+      ],
+      "observations": {
+        "s0017_successful_transactions": 3
+      },
+      "validation": "S0017 0x0053 decoded to 83 seconds and matched the AP200 label."
+    },
+    {
+      "key": "ZVW35_HYBRID_ECU_2101_ENGINE_AND_SOC",
+      "profile": "PRIUS_PHV_GEN1",
+      "request_id": "7E2",
+      "response_id": "7EA",
+      "service": "21",
+      "pid": "01",
+      "response_prefix": "6101",
+      "decoder": "field_map",
+      "safety_class": "READ_ONLY_DIAGNOSTIC",
+      "evidence_grade": "CONFIRMED",
+      "transport": "ISO-TP",
+      "source": "S0015 2014 Prius PHV Gen 1; Hybrid Assistant/Dr. Prius OCR/CAN correlation; CYD logger v2.4.2; S0018 2014 Prius PHV Gen 1 ZVW35; Autel MAXIAP200 OCR/CAN correlation; CYD logger v2.4.2 listen-only",
+      "fields": [
+        {
+          "name": "calculated_load",
+          "offset": 0,
+          "width_bytes": 1,
+          "formula": "A*20/51",
+          "evidence_grade": "CANDIDATE",
+          "unit": "%"
+        },
+        {
+          "name": "manifold_pressure",
+          "offset": 1,
+          "width_bytes": 1,
+          "formula": "B",
+          "evidence_grade": "CANDIDATE",
+          "unit": "kPa"
+        },
+        {
+          "name": "intake_air_temperature",
+          "offset": 2,
+          "width_bytes": 1,
+          "formula": "C-40",
+          "evidence_grade": "PROBABLE",
+          "unit": "degC"
+        },
+        {
+          "name": "ambient_temperature",
+          "offset": 3,
+          "width_bytes": 1,
+          "formula": "D-40",
+          "evidence_grade": "PROBABLE",
+          "unit": "degC"
+        },
+        {
+          "name": "coolant_temperature",
+          "offset": 5,
+          "width_bytes": 1,
+          "formula": "F-40",
+          "evidence_grade": "CONFIRMED",
+          "unit": "degC",
+          "ocr_labels": [
+            "Engine coolant temp"
+          ],
+          "ocr_tolerance": 0.6
+        },
+        {
+          "name": "engine_rpm",
+          "offset": 6,
+          "width_bytes": 2,
+          "formula": "uint16/4",
+          "evidence_grade": "PROBABLE",
+          "endian": "big",
+          "unit": "rpm"
+        },
+        {
+          "name": "vehicle_speed",
+          "offset": 8,
+          "width_bytes": 1,
+          "formula": "I*15625/25146",
+          "evidence_grade": "PROBABLE",
+          "unit": "mph"
+        },
+        {
+          "name": "runtime",
+          "offset": 9,
+          "width_bytes": 2,
+          "formula": "uint16",
+          "evidence_grade": "PROBABLE",
+          "endian": "big",
+          "unit": "s"
+        },
+        {
+          "name": "throttle",
+          "offset": 11,
+          "width_bytes": 1,
+          "formula": "L*20/51",
+          "evidence_grade": "PROBABLE",
+          "unit": "%"
+        },
+        {
+          "name": "accelerator_pedal_1",
+          "offset": 12,
+          "width_bytes": 1,
+          "formula": "M*20/51",
+          "evidence_grade": "PROBABLE",
+          "unit": "%"
+        },
+        {
+          "name": "accelerator_pedal_2",
+          "offset": 13,
+          "width_bytes": 1,
+          "formula": "N*20/51",
+          "evidence_grade": "PROBABLE",
+          "unit": "%"
+        },
+        {
+          "name": "auxiliary_battery_voltage",
+          "offset": 19,
+          "width_bytes": 2,
+          "formula": "uint16/1000",
+          "evidence_grade": "PROBABLE",
+          "endian": "big",
+          "unit": "V"
+        },
+        {
+          "name": "actual_soc",
+          "offset": 21,
+          "width_bytes": 1,
+          "formula": "V*20/51",
+          "evidence_grade": "CONFIRMED",
+          "unit": "%",
+          "ocr_labels": [
+            "State of charge (all bat)"
+          ],
+          "ocr_tolerance": 0.3
+        }
+      ],
+      "observations": {
+        "standalone_transactions": 25,
+        "bundled_transactions": 132,
+        "soc_median_absolute_error_percentage_points": 0.00588,
+        "s0018_7e2_successful_transactions": 87,
+        "s0018_ap200_actual_soc_example_pct": 20.0,
+        "s0018_ap200_coolant_example_degc": 66.0
+      },
+      "validation": "S0018 independently matched 20.0% all-battery SoC and 66 degC coolant. Fields marked CANDIDATE/PROBABLE retain their narrower field-level grades."
+    },
+    {
+      "key": "ZVW35_HYBRID_ECU_2161_MG1_STATUS",
+      "profile": "PRIUS_PHV_GEN1",
+      "request_id": "7E2",
+      "response_id": "7EA",
+      "service": "21",
+      "pid": "61",
+      "response_prefix": "6161",
+      "decoder": "field_map",
+      "safety_class": "READ_ONLY_DIAGNOSTIC",
+      "evidence_grade": "PROBABLE",
+      "transport": "ISO-TP",
+      "source": "S0015 2014 Prius PHV Gen 1; Hybrid Assistant/Dr. Prius OCR/CAN correlation; CYD logger v2.4.2; S0018 2014 Prius PHV Gen 1 ZVW35; Autel MAXIAP200 OCR/CAN correlation; CYD logger v2.4.2 listen-only",
+      "fields": [
+        {
+          "name": "mg1_temperature",
+          "offset": 0,
+          "formula": "A-40",
+          "unit": "degC",
+          "evidence_grade": "CONFIRMED",
+          "ocr_labels": [
+            "Motor temp no2"
+          ],
+          "ocr_tolerance": 0.6
+        },
+        {
+          "name": "mg1_temperature_history",
+          "offset": 1,
+          "formula": "B-40",
+          "unit": "degC",
+          "semantic_status": "CANDIDATE_LABEL",
+          "evidence_grade": "PROBABLE"
+        },
+        {
+          "name": "mg1_temperature_max",
+          "offset": 2,
+          "formula": "C-40",
+          "unit": "degC",
+          "semantic_status": "CANDIDATE_LABEL",
+          "evidence_grade": "PROBABLE"
+        },
+        {
+          "name": "mg1_rpm",
+          "offset": 3,
+          "width_bytes": 2,
+          "endian": "big",
+          "formula": "uint16-32768",
+          "unit": "rpm",
+          "evidence_grade": "PROBABLE"
+        }
+      ],
+      "observations": {
+        "combined_2161_2162_2167_2168_transactions": 260,
+        "s0018_successful_transactions": 22
+      },
+      "validation": "S0018 repeatedly matched 2161 temperature to AP200 label 'Motor temp no2'. AP200's no1/no2 labels are the reverse of the MG1/MG2 semantic key names; the observed label crosswalk is preserved explicitly."
+    },
+    {
+      "key": "ZVW35_HYBRID_ECU_2162_MG2_STATUS",
+      "profile": "PRIUS_PHV_GEN1",
+      "request_id": "7E2",
+      "response_id": "7EA",
+      "service": "21",
+      "pid": "62",
+      "response_prefix": "6162",
+      "decoder": "field_map",
+      "safety_class": "READ_ONLY_DIAGNOSTIC",
+      "evidence_grade": "PROBABLE",
+      "transport": "ISO-TP",
+      "source": "S0015 2014 Prius PHV Gen 1; Hybrid Assistant/Dr. Prius OCR/CAN correlation; CYD logger v2.4.2; S0018 2014 Prius PHV Gen 1 ZVW35; Autel MAXIAP200 OCR/CAN correlation; CYD logger v2.4.2 listen-only",
+      "fields": [
+        {
+          "name": "mg2_temperature",
+          "offset": 0,
+          "formula": "A-40",
+          "unit": "degC",
+          "evidence_grade": "CONFIRMED",
+          "ocr_labels": [
+            "Motor temp no1"
+          ],
+          "ocr_tolerance": 0.6
+        },
+        {
+          "name": "mg2_temperature_history",
+          "offset": 1,
+          "formula": "B-40",
+          "unit": "degC",
+          "semantic_status": "CANDIDATE_LABEL",
+          "evidence_grade": "PROBABLE"
+        },
+        {
+          "name": "mg2_temperature_max",
+          "offset": 2,
+          "formula": "C-40",
+          "unit": "degC",
+          "semantic_status": "CANDIDATE_LABEL",
+          "evidence_grade": "PROBABLE"
+        },
+        {
+          "name": "mg2_rpm",
+          "offset": 3,
+          "width_bytes": 2,
+          "endian": "big",
+          "formula": "uint16-32768",
+          "unit": "rpm",
+          "evidence_grade": "PROBABLE"
+        }
+      ],
+      "observations": {
+        "combined_2161_2162_2167_2168_transactions": 260,
+        "s0018_successful_transactions": 29
+      },
+      "notes": "Observed repeatedly but not independently label-correlated in S0015.",
+      "validation": "S0018 repeatedly matched 2162 temperature to AP200 label 'Motor temp no1'. AP200's no1/no2 labels are the reverse of the MG1/MG2 semantic key names; the observed label crosswalk is preserved explicitly."
+    },
+    {
+      "key": "ZVW35_HYBRID_ECU_2167_MG1_TORQUE",
+      "profile": "PRIUS_PHV_GEN1",
+      "request_id": "7E2",
+      "response_id": "7EA",
+      "service": "21",
+      "pid": "67",
+      "response_prefix": "6167",
+      "decoder": "field_map",
+      "safety_class": "READ_ONLY_DIAGNOSTIC",
+      "evidence_grade": "CANDIDATE",
+      "transport": "ISO-TP",
+      "source": "S0015 2014 Prius PHV Gen 1; Hybrid Assistant/Dr. Prius OCR/CAN correlation; CYD logger v2.4.2",
+      "fields": [
+        {
+          "name": "mg1_torque_command",
+          "offset": 0,
+          "width_bytes": 2,
+          "endian": "big",
+          "formula": "(uint16/8-4096)*0.7375621",
+          "unit": "ft-lb"
+        },
+        {
+          "name": "mg1_torque_execution",
+          "offset": 2,
+          "width_bytes": 2,
+          "endian": "big",
+          "formula": "(uint16/8-4096)*0.7375621",
+          "unit": "ft-lb"
+        },
+        {
+          "name": "mg1_control_mode",
+          "offset": 4,
+          "formula": "E"
+        }
+      ],
+      "observations": {
+        "combined_2161_2162_2167_2168_transactions": 260
+      },
+      "notes": "Formula is source-derived; S0015 was parked and did not provide a sufficient dynamic torque range."
+    },
+    {
+      "key": "ZVW35_HYBRID_ECU_2168_MG2_TORQUE",
+      "profile": "PRIUS_PHV_GEN1",
+      "request_id": "7E2",
+      "response_id": "7EA",
+      "service": "21",
+      "pid": "68",
+      "response_prefix": "6168",
+      "decoder": "field_map",
+      "safety_class": "READ_ONLY_DIAGNOSTIC",
+      "evidence_grade": "CANDIDATE",
+      "transport": "ISO-TP",
+      "source": "S0015 2014 Prius PHV Gen 1; Hybrid Assistant/Dr. Prius OCR/CAN correlation; CYD logger v2.4.2",
+      "fields": [
+        {
+          "name": "mg2_torque_command",
+          "offset": 0,
+          "width_bytes": 2,
+          "endian": "big",
+          "formula": "(uint16/8-4096)*0.7375621",
+          "unit": "ft-lb"
+        },
+        {
+          "name": "mg2_torque_execution",
+          "offset": 2,
+          "width_bytes": 2,
+          "endian": "big",
+          "formula": "(uint16/8-4096)*0.7375621",
+          "unit": "ft-lb"
+        },
+        {
+          "name": "mg2_control_mode",
+          "offset": 4,
+          "formula": "E"
+        }
+      ],
+      "observations": {
+        "combined_2161_2162_2167_2168_transactions": 260
+      },
+      "notes": "Formula is source-derived; S0015 was parked and did not provide a sufficient dynamic torque range."
+    },
+    {
+      "key": "ZVW35_HYBRID_ECU_2170_MG1_INVERTER_TEMPERATURE",
+      "profile": "PRIUS_PHV_GEN1",
+      "request_id": "7E2",
+      "response_id": "7EA",
+      "service": "21",
+      "pid": "70",
+      "response_prefix": "6170",
+      "decoder": "field_map",
+      "safety_class": "READ_ONLY_DIAGNOSTIC",
+      "evidence_grade": "CONFIRMED",
+      "transport": "ISO-TP",
+      "source": "S0015 2014 Prius PHV Gen 1; Hybrid Assistant/Dr. Prius OCR/CAN correlation; CYD logger v2.4.2; S0018 2014 Prius PHV Gen 1 ZVW35; Autel MAXIAP200 OCR/CAN correlation; CYD logger v2.4.2 listen-only",
+      "fields": [
+        {
+          "name": "mg1_inverter_temperature",
+          "offset": 0,
+          "formula": "A-40",
+          "unit": "degC",
+          "evidence_grade": "CONFIRMED",
+          "ocr_labels": [
+            "Inverter temp-(mg1)"
+          ],
+          "ocr_tolerance": 0.6
+        },
+        {
+          "name": "mg1_inverter_temperature_history",
+          "offset": 1,
+          "formula": "B-40",
+          "unit": "degC",
+          "evidence_grade": "CONFIRMED"
+        },
+        {
+          "name": "mg1_inverter_temperature_max",
+          "offset": 2,
+          "formula": "C-40",
+          "unit": "degC",
+          "evidence_grade": "CONFIRMED"
+        },
+        {
+          "name": "inverter_gate_status",
+          "offset": 3,
+          "formula": "bit(D,0)",
+          "evidence_grade": "CONFIRMED"
+        }
+      ],
+      "observations": {
+        "combined_2170_2171_transactions": 32,
+        "s0018_successful_transactions": 20
+      },
+      "validation": "S0018 AP200 current, after-IG-on, and maximum temperatures matched the decoded bytes."
+    },
+    {
+      "key": "ZVW35_HYBRID_ECU_2171_MG2_INVERTER_TEMPERATURE",
+      "profile": "PRIUS_PHV_GEN1",
+      "request_id": "7E2",
+      "response_id": "7EA",
+      "service": "21",
+      "pid": "71",
+      "response_prefix": "6171",
+      "decoder": "field_map",
+      "safety_class": "READ_ONLY_DIAGNOSTIC",
+      "evidence_grade": "CONFIRMED",
+      "transport": "ISO-TP",
+      "source": "S0015 2014 Prius PHV Gen 1; Hybrid Assistant/Dr. Prius OCR/CAN correlation; CYD logger v2.4.2; S0018 2014 Prius PHV Gen 1 ZVW35; Autel MAXIAP200 OCR/CAN correlation; CYD logger v2.4.2 listen-only",
+      "fields": [
+        {
+          "name": "mg2_inverter_temperature",
+          "offset": 0,
+          "formula": "A-40",
+          "unit": "degC",
+          "evidence_grade": "CONFIRMED",
+          "ocr_labels": [
+            "Inverter temp-(mg2)"
+          ],
+          "ocr_tolerance": 0.6
+        },
+        {
+          "name": "mg2_inverter_temperature_history",
+          "offset": 1,
+          "formula": "B-40",
+          "unit": "degC",
+          "evidence_grade": "CONFIRMED"
+        },
+        {
+          "name": "mg2_inverter_temperature_max",
+          "offset": 2,
+          "formula": "C-40",
+          "unit": "degC",
+          "evidence_grade": "CONFIRMED"
+        },
+        {
+          "name": "inverter_gate_status",
+          "offset": 3,
+          "width_bytes": 1,
+          "formula": "bit(D,0)",
+          "evidence_grade": "CONFIRMED"
+        }
+      ],
+      "observations": {
+        "combined_2170_2171_transactions": 32,
+        "s0018_successful_transactions": 19
+      },
+      "notes": "Observed but not independently label-correlated in S0015.",
+      "validation": "S0018 AP200 current, after-IG-on, and maximum temperatures matched the decoded bytes."
+    },
+    {
+      "key": "ZVW35_HYBRID_ECU_2174_BOOST_CONVERTER_TEMPERATURES",
+      "profile": "PRIUS_PHV_GEN1",
+      "request_id": "7E2",
+      "response_id": "7EA",
+      "service": "21",
+      "pid": "74",
+      "response_prefix": "6174",
+      "decoder": "field_map",
+      "safety_class": "READ_ONLY_DIAGNOSTIC",
+      "evidence_grade": "CANDIDATE",
+      "transport": "ISO-TP",
+      "source": "S0015 2014 Prius PHV Gen 1; Hybrid Assistant/Dr. Prius OCR/CAN correlation; CYD logger v2.4.2",
+      "fields": [
+        {
+          "name": "boost_converter_temperature_1",
+          "offset": 0,
+          "formula": "A*1.8-40",
+          "unit": "degF"
+        },
+        {
+          "name": "boost_converter_temperature_2",
+          "offset": 1,
+          "formula": "B*1.8-40",
+          "unit": "degF"
+        },
+        {
+          "name": "boost_converter_temperature_3",
+          "offset": 2,
+          "formula": "C*1.8-40",
+          "unit": "degF"
+        },
+        {
+          "name": "boost_converter_temperature_4",
+          "offset": 3,
+          "formula": "D*1.8-40",
+          "unit": "degF"
+        },
+        {
+          "name": "converter_status",
+          "offset": 4,
+          "formula": "E",
+          "semantic_status": "CANDIDATE_BITS"
+        }
+      ],
+      "observations": {
+        "successful_transactions": 260
+      },
+      "notes": "Voltage fields intentionally omitted: captured byte order did not support the source-table VL/VH formula."
+    },
+    {
+      "key": "ZVW35_HYBRID_ECU_2181_EIGHT_BLOCK_VOLTAGES",
+      "profile": "PRIUS_PHV_GEN1",
+      "request_id": "7E2",
+      "response_id": "7EA",
+      "service": "21",
+      "pid": "81",
+      "response_prefix": "6181",
+      "decoder": "block_array",
+      "safety_class": "READ_ONLY_DIAGNOSTIC",
+      "evidence_grade": "CONFIRMED",
+      "transport": "ISO-TP",
+      "source": "S0015 2014 Prius PHV Gen 1; Hybrid Assistant/Dr. Prius OCR/CAN correlation; CYD logger v2.4.2; S0018 2014 Prius PHV Gen 1 ZVW35; Autel MAXIAP200 OCR/CAN correlation; CYD logger v2.4.2 listen-only",
+      "preamble_bytes": 0,
+      "repeat": {
+        "name": "seven_cell_block_voltage",
+        "offset": 0,
+        "count": 8,
+        "width_bytes": 2,
+        "endian": "big",
+        "scale": 0.0012205691615167467,
+        "formula": "uint16*79.99/65535",
+        "unit": "V",
+        "evidence_grade": "CONFIRMED",
+        "ocr_label_pattern": "Battery block vol -v{index:02d}",
+        "ocr_tolerance": 0.05
+      },
+      "fields": [
+        {
+          "name": "auxiliary_voltage",
+          "offset": 16,
+          "width_bytes": 2,
+          "endian": "big",
+          "formula": "uint16*79.9/65535-40",
+          "unit": "V",
+          "evidence_grade": "CONFIRMED"
+        },
+        {
+          "name": "pack_voltage",
+          "offset": 18,
+          "width_bytes": 2,
+          "endian": "big",
+          "formula": "uint16/10",
+          "unit": "V",
+          "evidence_grade": "CONFIRMED",
+          "ocr_labels": [
+            "Power resource vb"
+          ],
+          "ocr_tolerance": 1.1
+        },
+        {
+          "name": "fan_motor_voltage_1",
+          "offset": 20,
+          "formula": "U/10",
+          "unit": "V",
+          "evidence_grade": "CONFIRMED"
+        },
+        {
+          "name": "fan_motor_voltage_2",
+          "offset": 21,
+          "formula": "V/10",
+          "unit": "V",
+          "evidence_grade": "CONFIRMED"
+        }
+      ],
+      "bounds": {
+        "minimum": 15.0,
+        "maximum": 35.0
+      },
+      "observations": {
+        "standalone_transactions": 150,
+        "bundled_transactions": 132,
+        "strict_aligned_rows": 23,
+        "block_average_median_absolute_error_v": 0.003007,
+        "block_difference_median_absolute_error_v": 0.000105,
+        "s0018_successful_transactions": 79,
+        "s0018_ap200_block_rmse_v": 0.009
+      },
+      "validation": "S0018 AP200 independently displayed all eight aggregate blocks; matched rows had about 0.009 V aggregate RMSE after display rounding. These are not individual cell values."
+    },
+    {
+      "key": "ZVW35_HYBRID_ECU_2187_BATTERY_TEMPERATURES",
+      "profile": "PRIUS_PHV_GEN1",
+      "request_id": "7E2",
+      "response_id": "7EA",
+      "service": "21",
+      "pid": "87",
+      "response_prefix": "6187",
+      "decoder": "field_map",
+      "safety_class": "READ_ONLY_DIAGNOSTIC",
+      "evidence_grade": "CONFIRMED",
+      "transport": "ISO-TP",
+      "source": "S0015 2014 Prius PHV Gen 1; Hybrid Assistant/Dr. Prius OCR/CAN correlation; CYD logger v2.4.2; S0018 2014 Prius PHV Gen 1 ZVW35; Autel MAXIAP200 OCR/CAN correlation; CYD logger v2.4.2 listen-only",
+      "fields": [
+        {
+          "name": "battery_intake_temperature_1",
+          "offset": 0,
+          "width_bytes": 2,
+          "formula": "uint16*255.9/65535-50",
+          "evidence_grade": "CONFIRMED",
+          "endian": "big",
+          "unit": "degC",
+          "ocr_labels": [
+            "Inhaling air temp"
+          ],
+          "ocr_tolerance": 0.6
+        },
+        {
+          "name": "battery_temperature_1",
+          "offset": 2,
+          "width_bytes": 2,
+          "formula": "uint16*255.9/65535-50",
+          "evidence_grade": "CONFIRMED",
+          "endian": "big",
+          "unit": "degC",
+          "ocr_labels": [
+            "Temp of batt tb1"
+          ],
+          "ocr_tolerance": 0.6
+        },
+        {
+          "name": "battery_temperature_2",
+          "offset": 4,
+          "width_bytes": 2,
+          "formula": "uint16*255.9/65535-50",
+          "evidence_grade": "CONFIRMED",
+          "endian": "big",
+          "unit": "degC",
+          "ocr_labels": [
+            "Temp of batt tb2"
+          ],
+          "ocr_tolerance": 0.6
+        },
+        {
+          "name": "battery_temperature_3",
+          "offset": 6,
+          "width_bytes": 2,
+          "formula": "uint16*255.9/65535-50",
+          "evidence_grade": "CONFIRMED",
+          "endian": "big",
+          "unit": "degC",
+          "ocr_labels": [
+            "Temp of batt tb3"
+          ],
+          "ocr_tolerance": 0.6
+        },
+        {
+          "name": "battery_temperature_4",
+          "offset": 8,
+          "width_bytes": 2,
+          "formula": "uint16*255.9/65535-50",
+          "evidence_grade": "CONFIRMED",
+          "endian": "big",
+          "unit": "degC",
+          "ocr_labels": [
+            "Temp of batt tb4"
+          ],
+          "ocr_tolerance": 0.6
+        },
+        {
+          "name": "battery_temperature_5",
+          "offset": 10,
+          "width_bytes": 2,
+          "formula": "uint16*255.9/65535-50",
+          "evidence_grade": "CONFIRMED",
+          "endian": "big",
+          "unit": "degC",
+          "ocr_labels": [
+            "Temp of batt tb5"
+          ],
+          "ocr_tolerance": 0.6
+        },
+        {
+          "name": "battery_temperature_6",
+          "offset": 12,
+          "width_bytes": 2,
+          "formula": "uint16*255.9/65535-50",
+          "evidence_grade": "CONFIRMED",
+          "endian": "big",
+          "unit": "degC",
+          "ocr_labels": [
+            "Temp of batt tb6"
+          ],
+          "ocr_tolerance": 0.6
+        },
+        {
+          "name": "battery_temperature_7",
+          "offset": 14,
+          "width_bytes": 2,
+          "formula": "uint16*255.9/65535-50",
+          "evidence_grade": "CONFIRMED",
+          "endian": "big",
+          "unit": "degC",
+          "ocr_labels": [
+            "Temp of batt tb7"
+          ],
+          "ocr_tolerance": 0.6
+        },
+        {
+          "name": "battery_temperature_8",
+          "offset": 16,
+          "width_bytes": 2,
+          "formula": "uint16*255.9/65535-50",
+          "evidence_grade": "CONFIRMED",
+          "endian": "big",
+          "unit": "degC",
+          "ocr_labels": [
+            "Temp of batt tb8"
+          ],
+          "ocr_tolerance": 0.6
+        },
+        {
+          "name": "battery_temperature_9",
+          "offset": 18,
+          "width_bytes": 2,
+          "formula": "uint16*255.9/65535-50",
+          "evidence_grade": "CONFIRMED",
+          "endian": "big",
+          "unit": "degC",
+          "ocr_labels": [
+            "Temp of batt tb9"
+          ],
+          "ocr_tolerance": 0.6
+        },
+        {
+          "name": "battery_temperature_10",
+          "offset": 20,
+          "width_bytes": 2,
+          "formula": "uint16*255.9/65535-50",
+          "evidence_grade": "CONFIRMED",
+          "endian": "big",
+          "unit": "degC",
+          "ocr_labels": [
+            "Temp of batt tb10"
+          ],
+          "ocr_tolerance": 0.6
+        },
+        {
+          "name": "battery_temperature_11",
+          "offset": 22,
+          "width_bytes": 2,
+          "formula": "uint16*255.9/65535-50",
+          "evidence_grade": "CONFIRMED",
+          "endian": "big",
+          "unit": "degC",
+          "ocr_labels": [
+            "Temp of batt tb11"
+          ],
+          "ocr_tolerance": 0.6
+        },
+        {
+          "name": "battery_temperature_12",
+          "offset": 24,
+          "width_bytes": 2,
+          "formula": "uint16*255.9/65535-50",
+          "evidence_grade": "CONFIRMED",
+          "endian": "big",
+          "unit": "degC",
+          "ocr_labels": [
+            "Temp of batt tb12"
+          ],
+          "ocr_tolerance": 0.6
+        },
+        {
+          "name": "battery_intake_temperature_2",
+          "offset": 26,
+          "width_bytes": 2,
+          "formula": "uint16*255.9/65535-50",
+          "evidence_grade": "CONFIRMED",
+          "endian": "big",
+          "unit": "degC",
+          "ocr_labels": [
+            "Inhaling air temp2"
+          ],
+          "ocr_tolerance": 0.6
+        },
+        {
+          "name": "battery_intake_temperature_3",
+          "offset": 28,
+          "width_bytes": 2,
+          "formula": "uint16*255.9/65535-50",
+          "evidence_grade": "CONFIRMED",
+          "endian": "big",
+          "unit": "degC",
+          "ocr_labels": [
+            "Inhaling air temp3"
+          ],
+          "ocr_tolerance": 0.6
+        },
+        {
+          "name": "battery_intake_temperature_4",
+          "offset": 30,
+          "width_bytes": 2,
+          "formula": "uint16*255.9/65535-50",
+          "evidence_grade": "CONFIRMED",
+          "endian": "big",
+          "unit": "degC",
+          "ocr_labels": [
+            "Inhaling air temp4"
+          ],
+          "ocr_tolerance": 0.6
+        }
+      ],
+      "observations": {
+        "standalone_transactions": 89,
+        "bundled_transactions": 132,
+        "s0018_successful_transactions": 38,
+        "s0018_ap200_labeled_battery_temperature_sensors": 12
+      },
+      "validation": "S0018 AP200 labels matched intake temperatures 1-4 and battery sensors TB1-TB12. For example TB1-TB12 decoded to the displayed 31.5-33.7 degC range."
+    },
+    {
+      "key": "ZVW35_HYBRID_ECU_2195_BLOCK_INTERNAL_RESISTANCE",
+      "profile": "PRIUS_PHV_GEN1",
+      "request_id": "7E2",
+      "response_id": "7EA",
+      "service": "21",
+      "pid": "95",
+      "response_prefix": "6195",
+      "decoder": "resistance_array",
+      "safety_class": "READ_ONLY_DIAGNOSTIC",
+      "evidence_grade": "CONFIRMED",
+      "transport": "ISO-TP",
+      "source": "S0015 2014 Prius PHV Gen 1; Hybrid Assistant/Dr. Prius OCR/CAN correlation; CYD logger v2.4.2; S0018 2014 Prius PHV Gen 1 ZVW35; Autel MAXIAP200 OCR/CAN correlation; CYD logger v2.4.2 listen-only",
+      "repeat": {
+        "name": "seven_cell_block_internal_resistance",
+        "offset": 0,
+        "count": 8,
+        "width_bytes": 1,
+        "scale": 0.001,
+        "unit": "ohm",
+        "evidence_grade": "CONFIRMED",
+        "ocr_label_pattern": "Internal resistance r{index:02d}",
+        "ocr_tolerance": 0.0011
+      },
+      "observations": {
+        "standalone_transactions": 1,
+        "bundled_transactions": 132,
+        "s0018_successful_transactions": 12,
+        "s0018_ap200_labeled_values": 8
+      },
+      "notes": "Eight values fit the PHV block topology but no independently labeled resistance display was available.",
+      "validation": "All eight 0x07 bytes decoded to 0.007 ohm and matched AP200 r01-r08 labels."
+    },
+    {
+      "key": "ZVW35_HYBRID_ECU_2198_BATTERY_CURRENT_AND_SOC",
+      "profile": "PRIUS_PHV_GEN1",
+      "request_id": "7E2",
+      "response_id": "7EA",
+      "service": "21",
+      "pid": "98",
+      "response_prefix": "6198",
+      "decoder": "field_map",
+      "safety_class": "READ_ONLY_DIAGNOSTIC",
+      "evidence_grade": "CONFIRMED",
+      "transport": "ISO-TP",
+      "source": "S0015 2014 Prius PHV Gen 1; Hybrid Assistant/Dr. Prius OCR/CAN correlation; CYD logger v2.4.2; S0018 2014 Prius PHV Gen 1 ZVW35; Autel MAXIAP200 OCR/CAN correlation; CYD logger v2.4.2 listen-only",
+      "fields": [
+        {
+          "name": "battery_current",
+          "offset": 0,
+          "width_bytes": 2,
+          "formula": "uint16/100-327.68",
+          "evidence_grade": "CONFIRMED",
+          "endian": "big",
+          "unit": "A",
+          "ocr_labels": [
+            "Batt pack val current"
+          ],
+          "ocr_tolerance": 0.2
+        },
+        {
+          "name": "charge_control_limit",
+          "offset": 2,
+          "width_bytes": 1,
+          "formula": "C/2-64",
+          "evidence_grade": "CONFIRMED",
+          "unit": "kW",
+          "ocr_labels": [
+            "Charge control value"
+          ],
+          "ocr_tolerance": 0.6
+        },
+        {
+          "name": "discharge_control_limit",
+          "offset": 3,
+          "width_bytes": 1,
+          "formula": "D/2-64",
+          "evidence_grade": "CONFIRMED",
+          "unit": "kW",
+          "ocr_labels": [
+            "Discharge control value"
+          ],
+          "ocr_tolerance": 0.6
+        },
+        {
+          "name": "delta_soc",
+          "offset": 4,
+          "width_bytes": 1,
+          "formula": "E/2",
+          "evidence_grade": "CONFIRMED",
+          "unit": "%",
+          "ocr_labels": [
+            "Delta soc"
+          ],
+          "ocr_tolerance": 0.3
+        },
+        {
+          "name": "soc_after_ig",
+          "offset": 5,
+          "width_bytes": 1,
+          "formula": "F/2",
+          "evidence_grade": "CONFIRMED",
+          "unit": "%",
+          "ocr_labels": [
+            "Soc after ig-on"
+          ],
+          "ocr_tolerance": 0.3
+        },
+        {
+          "name": "soc_max",
+          "offset": 6,
+          "width_bytes": 1,
+          "formula": "G/2",
+          "evidence_grade": "CONFIRMED",
+          "unit": "%",
+          "ocr_labels": [
+            "Status of charge max"
+          ],
+          "ocr_tolerance": 0.3
+        },
+        {
+          "name": "soc_min",
+          "offset": 7,
+          "width_bytes": 1,
+          "formula": "H/2",
+          "evidence_grade": "CONFIRMED",
+          "unit": "%",
+          "ocr_labels": [
+            "Status of charge min"
+          ],
+          "ocr_tolerance": 0.3
+        }
+      ],
+      "observations": {
+        "standalone_transactions": 272,
+        "bundled_transactions": 132,
+        "current_median_absolute_error_a": 0.05,
+        "s0018_successful_transactions": 59
+      },
+      "validation": "S0018 AP200 independently matched battery current, -29 kW charge limit, 35.5-36 kW discharge limit, 2% delta SoC, 25% ignition/max SoC, and 19.5% minimum SoC."
+    },
+    {
+      "key": "ZVW35_HYBRID_ECU_219B_BATTERY_FAN_STATUS",
+      "profile": "PRIUS_PHV_GEN1",
+      "request_id": "7E2",
+      "response_id": "7EA",
+      "service": "21",
+      "pid": "9B",
+      "response_prefix": "619B",
+      "decoder": "field_map",
+      "safety_class": "READ_ONLY_DIAGNOSTIC",
+      "evidence_grade": "CANDIDATE",
+      "transport": "ISO-TP",
+      "source": "S0015 2014 Prius PHV Gen 1; Hybrid Assistant/Dr. Prius OCR/CAN correlation; CYD logger v2.4.2",
+      "fields": [
+        {
+          "name": "battery_ecu_mode",
+          "offset": 0,
+          "formula": "A"
+        },
+        {
+          "name": "battery_fan_mode",
+          "offset": 1,
+          "formula": "B"
+        },
+        {
+          "name": "standby_blower_request",
+          "offset": 2,
+          "formula": "bit(C,7)"
+        },
+        {
+          "name": "blower_voltage",
+          "offset": 3,
+          "formula": "D*4.98/255",
+          "unit": "V"
+        }
+      ],
+      "observations": {
+        "successful_transactions": 31
+      },
+      "notes": "Observed during HVAC narration but not sufficiently time-aligned to promote individual labels."
+    },
+    {
+      "key": "ZVW35_HYBRID_ECU_2146_SIGNATURE",
+      "profile": "PRIUS_PHV_GEN1",
+      "request_id": "7E2",
+      "response_id": "7EA",
+      "service": "21",
+      "pid": "46",
+      "response_prefix": "6146",
+      "decoder": "response_signature",
+      "safety_class": "READ_ONLY_DIAGNOSTIC",
+      "evidence_grade": "CANDIDATE",
+      "transport": "ISO-TP",
+      "source": "S0015 2014 Prius PHV Gen 1; Hybrid Assistant/Dr. Prius OCR/CAN correlation; CYD logger v2.4.2",
+      "observations": {
+        "successful_transactions": 267
+      },
+      "notes": "Repeated PHV diagnostic response retained for fingerprinting; no trusted field formula is assigned."
+    },
+    {
+      "key": "ZVW35_ENGINE_ECU_21C1_MODEL_SIGNATURE",
+      "profile": "PRIUS_PHV_GEN1",
+      "request_id": "7E0",
+      "response_id": "7E8",
+      "service": "21",
+      "pid": "C1",
+      "response_prefix": "61C1",
+      "decoder": "ascii_model_signature",
+      "safety_class": "READ_ONLY_DIAGNOSTIC",
+      "evidence_grade": "CONFIRMED",
+      "transport": "ISO-TP",
+      "source": "S0018 2014 Prius PHV Gen 1 ZVW35; Autel MAXIAP200 OCR/CAN correlation; CYD logger v2.4.2 listen-only",
+      "signature": {
+        "ascii_contains": "ZVW35",
+        "minimum_response_bytes": 18
+      },
+      "observations": {
+        "s0018_successful_transactions": 19,
+        "response_ascii_prefix": "ZVW35 2ZRFXE",
+        "model_year": 2014
+      },
+      "validation": "Nineteen responses contained ZVW35/2ZRFXE and matched the AP200 model page."
+    },
+    {
+      "key": "ZVW35_ENGINE_ECU_0902_VIN",
+      "profile": "PRIUS_PHV_GEN1",
+      "request_id": "7E0",
+      "response_id": "7E8",
+      "service": "09",
+      "pid": "02",
+      "response_prefix": "4902",
+      "decoder": "vin",
+      "safety_class": "READ_ONLY_DIAGNOSTIC",
+      "evidence_grade": "CONFIRMED",
+      "transport": "ISO-TP",
+      "source": "S0018 2014 Prius PHV Gen 1 ZVW35; Autel MAXIAP200 OCR/CAN correlation; CYD logger v2.4.2 listen-only",
+      "prefix_skip_bytes": 1,
+      "mask_by_default": true,
+      "observations": {
+        "s0018_successful_transactions": 2,
+        "vin_masked": "JTDKN3DP4E3******",
+        "ocr_exact_match": true
+      },
+      "validation": "Two standard Mode 09 PID 02 responses matched the AP200 VIN exactly; exports mask it by default."
+    },
+    {
+      "key": "ZVW35_HYBRID_ECU_21C2_ECU_CODE",
+      "profile": "PRIUS_PHV_GEN1",
+      "request_id": "7E2",
+      "response_id": "7EA",
+      "service": "21",
+      "pid": "C2",
+      "response_prefix": "61C2",
+      "decoder": "ascii_field",
+      "safety_class": "READ_ONLY_DIAGNOSTIC",
+      "evidence_grade": "CONFIRMED",
+      "transport": "ISO-TP",
+      "source": "S0018 2014 Prius PHV Gen 1 ZVW35; Autel MAXIAP200 OCR/CAN correlation; CYD logger v2.4.2 listen-only",
+      "ascii_field": {
+        "name": "hybrid_ecu_code",
+        "offset": 0,
+        "length": 5
+      },
+      "observations": {
+        "s0018_successful_transactions": 10,
+        "value": "47520"
+      },
+      "validation": "The five-byte ASCII ECU code 47520 matched the AP200 live-data label."
+    },
+    {
+      "key": "ZVW35_HYBRID_ECU_2175_INVERTER_COOLANT_AND_PUMP",
+      "profile": "PRIUS_PHV_GEN1",
+      "request_id": "7E2",
+      "response_id": "7EA",
+      "service": "21",
+      "pid": "75",
+      "response_prefix": "6175",
+      "decoder": "field_map",
+      "safety_class": "READ_ONLY_DIAGNOSTIC",
+      "evidence_grade": "CONFIRMED",
+      "transport": "ISO-TP",
+      "source": "S0018 2014 Prius PHV Gen 1 ZVW35; Autel MAXIAP200 OCR/CAN correlation; CYD logger v2.4.2 listen-only",
+      "fields": [
+        {
+          "name": "inverter_pump_speed",
+          "offset": 1,
+          "width_bytes": 2,
+          "formula": "uint16",
+          "evidence_grade": "CONFIRMED",
+          "endian": "big",
+          "unit": "rpm",
+          "ocr_labels": [
+            "Inverter w/p revolution"
+          ],
+          "ocr_tolerance": 130.0
+        },
+        {
+          "name": "inverter_coolant_temperature",
+          "offset": 3,
+          "width_bytes": 1,
+          "formula": "D-40",
+          "evidence_grade": "CONFIRMED",
+          "unit": "degC",
+          "ocr_labels": [
+            "Inverter coolant water temperature"
+          ],
+          "ocr_tolerance": 0.6
+        }
+      ],
+      "signature": {
+        "response_length_bytes": 8
+      },
+      "observations": {
+        "s0018_successful_transactions": 24,
+        "ap200_pump_examples_rpm": [
+          3250,
+          3375
+        ],
+        "ap200_coolant_example_degc": 44
+      },
+      "validation": "S0018 AP200 labels matched pump speed and inverter coolant temperature."
+    },
+    {
+      "key": "ZVW35_HYBRID_ECU_218A_POWER_RESOURCE_CURRENTS",
+      "profile": "PRIUS_PHV_GEN1",
+      "request_id": "7E2",
+      "response_id": "7EA",
+      "service": "21",
+      "pid": "8A",
+      "response_prefix": "618A",
+      "decoder": "field_map",
+      "safety_class": "READ_ONLY_DIAGNOSTIC",
+      "evidence_grade": "CONFIRMED",
+      "transport": "ISO-TP",
+      "source": "S0018 2014 Prius PHV Gen 1 ZVW35; Autel MAXIAP200 OCR/CAN correlation; CYD logger v2.4.2 listen-only",
+      "fields": [
+        {
+          "name": "power_resource_current_sensor_1",
+          "offset": 0,
+          "width_bytes": 2,
+          "formula": "uint16/100-327.68",
+          "evidence_grade": "CONFIRMED",
+          "endian": "big",
+          "unit": "A",
+          "ocr_labels": [
+            "Bat no.1 no.2 val sens cur"
+          ],
+          "ocr_tolerance": 0.2
+        },
+        {
+          "name": "power_resource_current_sensor_2",
+          "offset": 2,
+          "width_bytes": 2,
+          "formula": "uint16/100-327.68",
+          "evidence_grade": "CONFIRMED",
+          "endian": "big",
+          "unit": "A",
+          "ocr_labels": [
+            "Power resource ib",
+            "Bat1 ib sens2 pwr resourc"
+          ],
+          "ocr_tolerance": 0.2
+        }
+      ],
+      "observations": {
+        "s0018_successful_transactions": 29,
+        "ap200_labeled_current_examples_a": [
+          4.82,
+          5.31,
+          5.37
+        ]
+      },
+      "validation": "Both signed current-sensor values followed the AP200 labels with 0.01 A scaling."
+    },
+    {
+      "key": "ZVW35_HYBRID_ECU_2192_BLOCK_EXTREMA",
+      "profile": "PRIUS_PHV_GEN1",
+      "request_id": "7E2",
+      "response_id": "7EA",
+      "service": "21",
+      "pid": "92",
+      "response_prefix": "6192",
+      "decoder": "field_map",
+      "safety_class": "READ_ONLY_DIAGNOSTIC",
+      "evidence_grade": "CONFIRMED",
+      "transport": "ISO-TP",
+      "source": "S0018 2014 Prius PHV Gen 1 ZVW35; Autel MAXIAP200 OCR/CAN correlation; CYD logger v2.4.2 listen-only",
+      "fields": [
+        {
+          "name": "minimum_block_voltage",
+          "offset": 0,
+          "width_bytes": 2,
+          "formula": "uint16*79.99/65535",
+          "evidence_grade": "CONFIRMED",
+          "endian": "big",
+          "unit": "V",
+          "ocr_labels": [
+            "Batt block minimum vol"
+          ],
+          "ocr_tolerance": 0.05
+        },
+        {
+          "name": "minimum_block_number",
+          "offset": 2,
+          "width_bytes": 1,
+          "formula": "C+1",
+          "evidence_grade": "CONFIRMED",
+          "unit": "1-based block",
+          "ocr_labels": [
+            "Minimum batt block no"
+          ],
+          "ocr_tolerance": 0.1
+        },
+        {
+          "name": "maximum_block_voltage",
+          "offset": 3,
+          "width_bytes": 2,
+          "formula": "uint16*79.99/65535",
+          "evidence_grade": "CONFIRMED",
+          "endian": "big",
+          "unit": "V",
+          "ocr_labels": [
+            "Batt block max vol"
+          ],
+          "ocr_tolerance": 0.05
+        },
+        {
+          "name": "maximum_block_number",
+          "offset": 5,
+          "width_bytes": 1,
+          "formula": "F+1",
+          "evidence_grade": "CONFIRMED",
+          "unit": "1-based block",
+          "ocr_labels": [
+            "Max battery block no"
+          ],
+          "ocr_tolerance": 0.1
+        },
+        {
+          "name": "block_count",
+          "offset": 6,
+          "width_bytes": 1,
+          "formula": "G",
+          "evidence_grade": "CONFIRMED",
+          "expected": 8,
+          "ocr_labels": [
+            "Battery block num"
+          ],
+          "ocr_tolerance": 0.1
+        }
+      ],
+      "derived_fields": [
+        {
+          "name": "block_voltage_difference",
+          "formula": "maximum_block_voltage-minimum_block_voltage",
+          "unit": "V",
+          "evidence_grade": "CONFIRMED"
+        }
+      ],
+      "signature": {
+        "response_length_bytes": 24
+      },
+      "observations": {
+        "s0018_successful_transactions": 48
+      },
+      "validation": "AP200 labels confirmed eight blocks, voltage extrema, and zero-based payload indexes converted to one-based block numbers."
+    }
+  ],
+  "bundled_requests": [
+    {
+      "profile": "CAMRY_HYBRID_GEN1",
+      "request_id": "7E2",
+      "service": "21",
+      "pids": [
+        "CE",
+        "D0",
+        "CF"
+      ],
+      "request_payload": "21CED0CF",
+      "evidence_grade": "PROBABLE",
+      "safety_class": "READ_ONLY_DIAGNOSTIC",
+      "observations": {
+        "s0012_successful": 81,
+        "s0013_successful": 81
+      }
+    },
+    {
+      "profile": "PRIUS_PHV_GEN1",
+      "request_id": "7E2",
+      "service": "21",
+      "pids": [
+        "01",
+        "81",
+        "95",
+        "87",
+        "98"
+      ],
+      "request_payload": "210181958798",
+      "evidence_grade": "PROBABLE",
+      "safety_class": "READ_ONLY_DIAGNOSTIC",
+      "observations": {
+        "s0015_successful": 132
+      }
+    },
+    {
+      "profile": "PRIUS_PHV_GEN1",
+      "request_id": "7E2",
+      "service": "21",
+      "pids": [
+        "61",
+        "62",
+        "67",
+        "68"
+      ],
+      "request_payload": "2161626768",
+      "evidence_grade": "CANDIDATE",
+      "safety_class": "READ_ONLY_DIAGNOSTIC",
+      "observations": {
+        "s0015_successful": 260
+      }
+    },
+    {
+      "profile": "PRIUS_PHV_GEN1",
+      "request_id": "7E2",
+      "service": "21",
+      "pids": [
+        "70",
+        "71"
+      ],
+      "request_payload": "217071",
+      "evidence_grade": "CANDIDATE",
+      "safety_class": "READ_ONLY_DIAGNOSTIC",
+      "observations": {
+        "s0015_successful": 32
+      }
+    }
+  ],
+  "profile_signatures": [
+    {
+      "profile": "PRIUS_GEN2",
+      "request_id": "7E3",
+      "service": "21",
+      "pid": "CE",
+      "response_id": "7EB",
+      "response_prefix": "61CE",
+      "block_count": 14,
+      "evidence_grade": "CONFIRMED",
+      "detector_weight": 90
+    },
+    {
+      "profile": "CAMRY_HYBRID_GEN1",
+      "request_id": "7E0",
+      "service": "21",
+      "pid": "C1",
+      "response_id": "7E8",
+      "response_ascii_contains": "AHV40L",
+      "evidence_grade": "CONFIRMED",
+      "detector_weight": 100
+    },
+    {
+      "profile": "CAMRY_HYBRID_GEN1",
+      "request_id": "7E2",
+      "service": "21",
+      "pid": "CE",
+      "response_id": "7EA",
+      "response_length_bytes": 39,
+      "block_count": 17,
+      "evidence_grade": "CONFIRMED",
+      "detector_weight": 90
+    },
+    {
+      "profile": "CAMRY_HYBRID_GEN1",
+      "request_id": "7E2",
+      "service": "21",
+      "pid": "C1",
+      "response_id": "7EA",
+      "response_ascii_contains": "AHV40L",
+      "evidence_grade": "CONFIRMED",
+      "detector_weight": 100
+    },
+    {
+      "profile": "PRIUS_PHV_GEN1",
+      "request_id": "7E2",
+      "request_payload": "210181958798",
+      "response_id": "7EA",
+      "response_length_bytes": 100,
+      "evidence_grade": "PROBABLE",
+      "detector_weight": 95
+    },
+    {
+      "profile": "PRIUS_PHV_GEN1",
+      "request_id": "7E0",
+      "service": "21",
+      "pid": "C1",
+      "response_id": "7E8",
+      "response_ascii_contains": "ZVW35",
+      "evidence_grade": "CONFIRMED",
+      "detector_weight": 100,
+      "authoritative": true
+    },
+    {
+      "profile": "PRIUS_PHV_GEN1",
+      "request_id": "7E2",
+      "service": "21",
+      "pid": "81",
+      "response_id": "7EA",
+      "response_length_bytes": 24,
+      "block_count": 8,
+      "block_voltage_bounds_v": [
+        15.0,
+        35.0
+      ],
+      "evidence_grade": "CONFIRMED",
+      "detector_weight": 90
+    }
+  ],
+  "capture_evidence": {
+    "S0013": {
+      "vehicle": "2007 Camry Hybrid AHV40",
+      "raw_frames": 505243,
+      "session_transmit_frames": 0,
+      "diagnostic_transactions": 1981,
+      "notes": "Same physical vehicle likely used for S0010/S0012/S0013; limits promotion independence."
+    },
+    "S0015": {
+      "vehicle": "2014 Prius PHV ZVW35",
+      "raw_frames": 573133,
+      "session_transmit_frames": 0,
+      "diagnostic_transactions": 2861,
+      "notes": "Logger originally labeled the capture as Camry 95%; v0.5.4 preserves that evidence while adding PHV fingerprints for a future detector update."
+    },
+    "S0016": {
+      "vehicle": "2004 Prius Gen 2 NHW20",
+      "notes": "Autel MAXIAP200 screen/CAN correlation confirmed 21CE and 21D0."
+    },
+    "S0017": {
+      "vehicle": "2007 Camry Hybrid AHV40L",
+      "logger_version": "2.4.2",
+      "raw_frames": 880701,
+      "session_transmit_frames": 0,
+      "diagnostic_transactions": 954,
+      "successful_diagnostic_transactions": 872,
+      "alignment_rms_ms": 5.871164159805791,
+      "notes": "Autel MAXIAP200 labels independently confirmed 21CE SoC/current/17 block voltages, 21D0 extrema/index/resistance layout, selected 21C3/21CF temperatures, and the 7E2/21C1 AHV40L signature."
+    },
+    "S0018": {
+      "vehicle": "2014 Prius PHV Gen 1 ZVW35",
+      "logger_version": "2.4.2",
+      "raw_frames": 1195423,
+      "session_transmit_frames": 0,
+      "diagnostic_transactions": 1870,
+      "successful_diagnostic_transactions": 1554,
+      "alignment_rms_ms": 5.497549916915953,
+      "model_signature": "ZVW35 2ZRFXE",
+      "vin_masked": "JTDKN3DP4E3******",
+      "source_sha256": {
+        "CANLOG_083126_130240.zip": "d7f85f1c9d56753eba9ac38ba48e763be68962e2afd03ec96bbb2253209297f6",
+        "ToyotaCAN_Evidence_20260831_135501.zip": "d8ec3ee2554d2762de99c2e1b6418d701697228fc518c059d11372afe10b8c0f"
+      },
+      "notes": "AP200 identity and labeled battery data contradict the logger's Camry 95% heuristic. The model-code response is authoritative for offline profile correction."
+    }
+  },
+  "release_notes": [
+    "Uses the S0018 ZVW35/2ZRFXE model response to distinguish Prius PHV Gen 1 from AHV40 Camry.",
+    "Adds masked standard VIN, hybrid ECU code, inverter coolant/pump, dual power-resource current, and block-extrema definitions.",
+    "Confirms PHV 2101 core SoC/coolant, 2170/2171 temperatures, 2181 eight aggregate block voltages, 2187 intake/TB1-TB12 temperatures, 2195 eight resistances, and 2198 current/SoC/control fields.",
+    "Retains field-level PROBABLE/CANDIDATE grades where S0018 did not supply independent dynamic corroboration.",
+    "Does not claim 56 individual PHV cell voltages and adds no control/write definition."
+  ]
+}
