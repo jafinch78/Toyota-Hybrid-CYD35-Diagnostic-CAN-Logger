@@ -79,7 +79,7 @@ Therefore:
 
 ## Revised START Model
 
-START-PERF2 must now treat startup as three distinct windows:
+START-PERF2 must now treat startup as four distinct measurable windows:
 
 ```text
 command accepted
